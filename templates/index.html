@@ -60,14 +60,67 @@
 
     <div id="loading" class="loading">
         <div class="loading-content">
-            <i class="fas fa-spinner fa-spin text-4xl mb-4"></i>
+            <i class="fas fa-spinner fa-spin text-4xl mb-4 text-blue-600"></i>
             <p class="text-xl">Buscando patrones relevantes...</p>
+        </div>
+    </div>
+
+    <div id="ollamaLoading" class="loading">
+        <div class="loading-content">
+            <i class="fas fa-spinner fa-spin text-4xl mb-4 text-green-600"></i>
+            <p class="text-xl">Procesando respuesta del asistente...</p>
         </div>
     </div>
 
     <!-- Scripts para markdown y resaltado de código -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <style>
+        /* Estilos para los bloques de código */
+        .code-block {
+            position: relative;
+            margin: 1em 0;
+            border-radius: 0.5rem;
+            overflow: hidden;
+            background: #1e1e1e;
+        }
+        .code-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 1rem;
+            background: #2d2d2d;
+            border-bottom: 1px solid #3d3d3d;
+        }
+        .code-language {
+            color: #9cdcfe;
+            font-size: 0.9em;
+        }
+        .copy-button {
+            background: #3d3d3d;
+            color: #fff;
+            border: none;
+            padding: 0.25rem 0.75rem;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: background-color 0.2s;
+        }
+        .copy-button:hover {
+            background: #4d4d4d;
+        }
+        .copy-button.copied {
+            background: #2ecc71;
+        }
+        pre {
+            margin: 0;
+            padding: 1rem;
+            overflow-x: auto;
+        }
+        code {
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        }
+    </style>
     <script>
         // Configurar marked para usar highlight.js
         marked.setOptions({
@@ -77,8 +130,44 @@
                 }
                 return hljs.highlightAuto(code).value;
             },
-            langPrefix: 'hljs language-'
+            langPrefix: 'hljs language-',
+            renderer: {
+                code(code, language) {
+                    const validLanguage = language && hljs.getLanguage(language) ? language : 'plaintext';
+                    const highlightedCode = hljs.highlight(code, { language: validLanguage }).value;
+                    return `
+                        <div class="code-block">
+                            <div class="code-header">
+                                <span class="code-language">${validLanguage}</span>
+                                <button class="copy-button" onclick="copyCode(this, \`${code.replace(/`/g, '\\`')}\`)">
+                                    <i class="fas fa-copy"></i> Copiar
+                                </button>
+                            </div>
+                            <pre><code class="hljs language-${validLanguage}">${highlightedCode}</code></pre>
+                        </div>
+                    `;
+                }
+            }
         });
+
+        // Función para copiar código
+        function copyCode(button, code) {
+            navigator.clipboard.writeText(code).then(() => {
+                const originalText = button.innerHTML;
+                button.innerHTML = '<i class="fas fa-check"></i> Copiado';
+                button.classList.add('copied');
+                setTimeout(() => {
+                    button.innerHTML = originalText;
+                    button.classList.remove('copied');
+                }, 2000);
+            }).catch(err => {
+                console.error('Error al copiar:', err);
+                button.innerHTML = '<i class="fas fa-times"></i> Error';
+                setTimeout(() => {
+                    button.innerHTML = '<i class="fas fa-copy"></i> Copiar';
+                }, 2000);
+            });
+        }
 
         document.getElementById('searchForm').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -89,7 +178,8 @@
             const patternsList = document.getElementById('patternsList');
             
             // Mostrar loading inicial
-            loading.style.display = 'block';
+            loading.style.display = 'flex';
+            ollamaLoading.style.display = 'none';
             results.innerHTML = '';
             patternsList.innerHTML = '';
 
@@ -104,21 +194,34 @@
 
                 // Ocultar loading inicial y mostrar loading de Ollama
                 loading.style.display = 'none';
-                ollamaLoading.style.display = 'block';
+                ollamaLoading.style.display = 'flex';
 
                 const data = await response.json();
                 
                 // Crear elementos para el menú lateral
-                const patternsListHTML = data.relevant_patterns.map((pattern, index) => `
+                const patternsListHTML = data.relevant_patterns.map((pattern, index) => {
+                    let statusBadge = '';
+                    if (pattern.status === 'DEPRECATED') {
+                        statusBadge = '<span class="px-2 py-1 text-xs font-semibold text-red-800 bg-red-100 rounded-full">Deprecado</span>';
+                    } else if (pattern.status === 'REPLACEMENT') {
+                        statusBadge = '<span class="px-2 py-1 text-xs font-semibold text-green-800 bg-green-100 rounded-full">Reemplazo</span>';
+                    }
+                    
+                    return `
                     <div class="mb-4">
                         <a href="https://capec.mitre.org/data/definitions/${pattern.pattern_id}.html" 
                            target="_blank"
                            class="block p-2 rounded-lg hover:bg-gray-100 transition-colors">
-                            <div class="text-sm font-medium text-gray-800">${pattern.name}</div>
-                            <div class="text-xs text-gray-500">ID: ${pattern.pattern_id}</div>
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <div class="text-sm font-medium text-gray-800">${pattern.name}</div>
+                                    <div class="text-xs text-gray-500">ID: ${pattern.pattern_id}</div>
+                                </div>
+                                ${statusBadge}
+                            </div>
                         </a>
                     </div>
-                `).join('');
+                `}).join('');
 
                 // Agregar la respuesta de Ollama con soporte para markdown
                 const ollamaResponse = `

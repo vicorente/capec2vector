@@ -126,18 +126,38 @@ def search_patterns(query_text: str, top_k: int = 5):
             anns_field="embedding",
             param=search_params,
             limit=top_k,
-            output_fields=["pattern_id", "name", "description"]
+            output_fields=["pattern_id", "name", "description", "status", "typical_severity", "typical_likelihood", "typical_attack_vectors", "typical_attack_prerequisites", "typical_resources_required", "typical_attack_mitigations", "typical_attack_examples"]
         )
         
         formatted_results = []
         for hits in results:
             for hit in hits:
-                formatted_results.append({
-                    "pattern_id": hit.entity.get("pattern_id"),
-                    "name": hit.entity.get("name"),
-                    "description": hit.entity.get("description"),
-                    "similarity_score": 1 - hit.score
-                })
+                pattern = {
+                    "pattern_id": hit.entity.pattern_id,
+                    "name": hit.entity.name,
+                    "description": hit.entity.description,
+                    "similarity_score": 1 - hit.score,
+                    "status": hit.entity.status,
+                    "typical_severity": hit.entity.typical_severity,
+                    "typical_likelihood": hit.entity.typical_likelihood,
+                    "typical_attack_vectors": hit.entity.typical_attack_vectors,
+                    "typical_attack_prerequisites": hit.entity.typical_attack_prerequisites,
+                    "typical_resources_required": hit.entity.typical_resources_required,
+                    "typical_attack_mitigations": hit.entity.typical_attack_mitigations,
+                    "typical_attack_examples": hit.entity.typical_attack_examples
+                }
+                
+                # Si el patrón está deprecado, buscar sus reemplazos
+                if pattern["status"] == "DEPRECATED":
+                    logger.info(f"Patrón {pattern['pattern_id']} está deprecado, buscando reemplazos...")
+                    replacement_patterns = find_replacement_patterns(pattern["description"])
+                    if replacement_patterns:
+                        logger.info(f"Encontrados {len(replacement_patterns)} patrones de reemplazo")
+                        formatted_results.extend(replacement_patterns)
+                    else:
+                        logger.warning(f"No se encontraron patrones de reemplazo para {pattern['pattern_id']}")
+                
+                formatted_results.append(pattern)
         
         logger.info(f"Búsqueda completada. Encontrados {len(formatted_results)} patrones")
         return formatted_results
@@ -147,6 +167,46 @@ def search_patterns(query_text: str, top_k: int = 5):
         raise HTTPException(status_code=500, detail=f"Error durante la búsqueda: {str(e)}")
     finally:
         logger.info("Cerrando conexión con Milvus")
+        connections.disconnect("default")
+
+def find_replacement_patterns(description: str) -> List[dict]:
+    """Busca patrones de reemplazo en la descripción de un patrón deprecado"""
+    try:
+        # Buscar IDs de patrones en el formato CAPEC-XXX
+        import re
+        replacement_ids = re.findall(r'CAPEC-(\d+)', description)
+        
+        if not replacement_ids:
+            return []
+        
+        collection = connect_to_milvus()
+        
+        # Buscar los patrones de reemplazo
+        replacement_patterns = []
+        for pattern_id in replacement_ids:
+            try:
+                results = collection.query(
+                    expr=f'pattern_id == "CAPEC-{pattern_id}"',
+                    output_fields=["pattern_id", "name", "description"]
+                )
+                if results:
+                    pattern = results[0]
+                    replacement_patterns.append({
+                        "pattern_id": pattern.get("pattern_id"),
+                        "name": pattern.get("name"),
+                        "description": pattern.get("description"),
+                        "similarity_score": 1.0,  # Máxima relevancia para patrones de reemplazo
+                        "status": "REPLACEMENT"
+                    })
+            except Exception as e:
+                logger.warning(f"Error al buscar patrón de reemplazo CAPEC-{pattern_id}: {str(e)}")
+        
+        return replacement_patterns
+    
+    except Exception as e:
+        logger.error(f"Error al buscar patrones de reemplazo: {str(e)}")
+        return []
+    finally:
         connections.disconnect("default")
 
 @app.post("/search")
@@ -171,8 +231,7 @@ def create_ollama_prompt(results):
     prompt += f"""Para cada patrón de ataque, proporciona una breve descripción y el ID del patrón. Además, 
     proporciona una explicación detallada del patrón de ataque y cómo se puede explotar.	
     Proporciona un ejemplo de código en python para cada patrón de ataque, o un ejemplo de comando en terminal si es aplicable.
-    Si encuentras un patrón etiquetado como "DEPRECATED", "DUPLICATED", "OBSOLETE" o "DRAFT", busca el patrón que lo reemplaza y proporciona la información de ese patrón.
-    No te saltes ningún patrón, responde a todas las preguntas. Si hay un patrón sobre el que no tienes información, presenta una respuesta informativa.
+    De todos los patrones, responde a todas las preguntas. Si hay un patrón sobre el que no tienes información, presenta una respuesta informativa.
     """
     logger.info("Prompt creado exitosamente")
     return prompt
