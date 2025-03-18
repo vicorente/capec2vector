@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buscador de Patrones CAPEC</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" rel="stylesheet">
+    <link href="/static/styles.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="flex">
+        <!-- Menú lateral -->
+        <div id="patternsSidebar" class="hidden md:block w-64 bg-white shadow-lg h-screen fixed left-0 top-0 overflow-y-auto">
+            <div class="p-4 border-b">
+                <h2 class="text-lg font-semibold text-gray-800">
+                    <i class="fas fa-list text-blue-600 mr-2"></i>
+                    Patrones CAPEC
+                </h2>
+            </div>
+            <div id="patternsList" class="p-4">
+                <!-- Los patrones se insertarán aquí -->
+            </div>
+        </div>
+
+        <!-- Contenido principal -->
+        <div class="flex-1 md:ml-64">
+            <div class="container mx-auto px-4 py-8">
+                <header class="text-center mb-12">
+                    <h1 class="text-4xl font-bold text-gray-800 mb-4">
+                        <i class="fas fa-shield-alt text-blue-600 mr-2"></i>
+                        Buscador de Patrones CAPEC
+                    </h1>
+                    <p class="text-gray-600">Encuentra patrones de ataque relevantes usando búsqueda semántica</p>
+                </header>
+
+                <div class="max-w-3xl mx-auto bg-white rounded-lg shadow-lg p-6 mb-8">
+                    <form id="searchForm" class="space-y-4">
+                        <div class="flex gap-4">
+                            <input type="text" 
+                                   id="query" 
+                                   name="query" 
+                                   class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                   placeholder="Describe el tipo de ataque que buscas...">
+                            <button type="submit" 
+                                    class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <i class="fas fa-search mr-2"></i>Buscar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <div id="results" class="max-w-4xl mx-auto space-y-6">
+                    <!-- Los resultados se insertarán aquí -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="loading" class="loading">
+        <div class="loading-content">
+            <i class="fas fa-spinner fa-spin text-4xl mb-4"></i>
+            <p class="text-xl">Buscando patrones relevantes...</p>
+        </div>
+    </div>
+
+    <!-- Scripts para markdown y resaltado de código -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>
+        // Configurar marked para usar highlight.js
+        marked.setOptions({
+            highlight: function(code, lang) {
+                if (lang && hljs.getLanguage(lang)) {
+                    return hljs.highlight(code, { language: lang }).value;
+                }
+                return hljs.highlightAuto(code).value;
+            },
+            langPrefix: 'hljs language-'
+        });
+
+        document.getElementById('searchForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const query = document.getElementById('query').value;
+            const loading = document.getElementById('loading');
+            const ollamaLoading = document.getElementById('ollamaLoading');
+            const results = document.getElementById('results');
+            const patternsList = document.getElementById('patternsList');
+            
+            // Mostrar loading inicial
+            loading.style.display = 'block';
+            results.innerHTML = '';
+            patternsList.innerHTML = '';
+
+            try {
+                const response = await fetch('/ollama/query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ query }),
+                });
+
+                // Ocultar loading inicial y mostrar loading de Ollama
+                loading.style.display = 'none';
+                ollamaLoading.style.display = 'block';
+
+                const data = await response.json();
+                
+                // Crear elementos para el menú lateral
+                const patternsListHTML = data.relevant_patterns.map((pattern, index) => `
+                    <div class="mb-4">
+                        <a href="https://capec.mitre.org/data/definitions/${pattern.pattern_id}.html" 
+                           target="_blank"
+                           class="block p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                            <div class="text-sm font-medium text-gray-800">${pattern.name}</div>
+                            <div class="text-xs text-gray-500">ID: ${pattern.pattern_id}</div>
+                        </a>
+                    </div>
+                `).join('');
+
+                // Agregar la respuesta de Ollama con soporte para markdown
+                const ollamaResponse = `
+                    <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+                        <h2 class="text-2xl font-bold text-gray-800 mb-4">
+                            <i class="fas fa-robot text-green-600 mr-2"></i>
+                            Respuesta del Asistente
+                        </h2>
+                        <div class="prose prose-sm sm:prose lg:prose-lg max-w-none markdown-content">
+                            ${marked.parse(data.answer)}
+                        </div>
+                    </div>
+                `;
+
+                results.innerHTML = ollamaResponse;
+                patternsList.innerHTML = patternsListHTML;
+                
+                // Resaltar el código después de insertar el contenido
+                document.querySelectorAll('pre code').forEach((block) => {
+                    hljs.highlightBlock(block);
+                });
+            } catch (error) {
+                results.innerHTML = `
+                    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+                        <p>Error al realizar la búsqueda: ${error.message}</p>
+                    </div>
+                `;
+            } finally {
+                loading.style.display = 'none';
+                ollamaLoading.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html> 

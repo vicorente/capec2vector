@@ -12,6 +12,7 @@ downloads/
 eggs/
 .eggs/
 lib/
+volumes/
 lib64/
 parts/
 sdist/
@@ -26,7 +27,6 @@ venv/
 ENV/
 .env
 .venv
-
 # IDE - VSCode
 .vscode/*
 !.vscode/settings.json
@@ -49,3 +49,5 @@ embeddings/
 .Trashes
 ehthumbs.db
 Thumbs.db
+*.meta
+*.log
