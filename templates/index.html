@@ -65,6 +65,11 @@
         </div>
     </div>
 
+    <!-- Botón flotante para detener la generación -->
+    <button id="stopGeneration" class="fixed bottom-4 right-4 bg-red-600 text-white p-3 rounded-full shadow-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 hidden">
+        <i class="fas fa-stop"></i>
+    </button>
+
     <!-- Scripts para markdown y resaltado de código -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
@@ -123,10 +128,16 @@
                 // Crear un contenedor para la respuesta
                 results.innerHTML = `
                     <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
-                        <h2 class="text-2xl font-bold text-gray-800 mb-4">
-                            <i class="fas fa-robot text-green-600 mr-2"></i>
-                            Respuesta del Asistente
-                        </h2>
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-2xl font-bold text-gray-800">
+                                <i class="fas fa-robot text-green-600 mr-2"></i>
+                                Respuesta del Asistente
+                            </h2>
+                            <button id="scrollToBottom" class="px-3 py-1 bg-gray-600 text-white rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500">
+                                <i class="fas fa-arrow-down mr-2"></i>
+                                Ir al final
+                            </button>
+                        </div>
                         <div class="prose prose-sm sm:prose lg:prose-lg max-w-none markdown-content" id="streaming-response">
                         </div>
                     </div>
@@ -136,27 +147,72 @@
                 const responseContainer = document.getElementById('streaming-response');
                 let fullResponse = '';
                 let patternsReceived = false;
+                let isUserScrolling = false;
+                let scrollTimeout = null;
+                let lastScrollPosition = 0;
+                let controller = null;
+                let currentStreamId = null;
 
-                // Función para hacer scroll suave
-                function smoothScrollToBottom() {
+                // Función para scroll instantáneo al final
+                function scrollToBottom() {
                     window.scrollTo({
                         top: document.documentElement.scrollHeight,
-                        behavior: 'smooth'
+                        behavior: 'instant'
                     });
                 }
 
+                // Detectar scroll manual del usuario
+                window.addEventListener('scroll', () => {
+                    if (scrollTimeout) clearTimeout(scrollTimeout);
+                    
+                    const currentScrollPosition = window.scrollY;
+                    const isScrollingUp = currentScrollPosition < lastScrollPosition;
+                    lastScrollPosition = currentScrollPosition;
+                    
+                    const isAtBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 100;
+                    isUserScrolling = !isAtBottom;
+                });
+
+                // Configurar botón de scroll al final
+                document.getElementById('scrollToBottom').addEventListener('click', () => {
+                    scrollToBottom();
+                });
+
+                // Configurar botón de detener generación
+                const stopButton = document.getElementById('stopGeneration');
+                stopButton.addEventListener('click', async () => {
+                    if (currentStreamId) {
+                        try {
+                            const response = await fetch(`/ollama/stop/${currentStreamId}`, {
+                                method: 'POST'
+                            });
+                            if (response.ok) {
+                                stopButton.classList.add('hidden');
+                                showErrorNotification('Generación detenida por el usuario');
+                            }
+                        } catch (error) {
+                            showErrorNotification(`Error al detener la generación: ${error.message}`);
+                        }
+                    }
+                });
+
                 // Realizar la petición POST con streaming
+                controller = new AbortController();
                 const response = await fetch('/ollama/query/stream', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({ query }),
+                    signal: controller.signal
                 });
 
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
+
+                // Mostrar el botón de detener
+                stopButton.classList.remove('hidden');
 
                 // Desactivar el elemento de espera cuando comienza el streaming
                 loading.style.display = 'none';
@@ -177,6 +233,10 @@
                                 if (line.startsWith('data: ')) {
                                     const data = JSON.parse(line.slice(6));
                                     
+                                    if (data.stream_id) {
+                                        currentStreamId = data.stream_id;
+                                    }
+                                    
                                     if (data.patterns && !patternsReceived) {
                                         try {
                                             // Crear elementos para los patrones
@@ -193,12 +253,14 @@
                                             
                                             patternsList.innerHTML = patternsListHTML;
                                             patternsReceived = true;
-                                            smoothScrollToBottom();
                                         } catch (patternError) {
                                             showErrorNotification(`Error al procesar los patrones: ${patternError.message}`);
                                         }
                                     } else if (data.chunk) {
                                         try {
+                                            // Guardar la posición actual del scroll antes de actualizar el contenido
+                                            const currentScroll = window.scrollY;
+                                            
                                             // Agregar el nuevo chunk a la respuesta
                                             fullResponse += data.chunk;
                                             // Actualizar el contenido con markdown renderizado
@@ -207,29 +269,45 @@
                                             document.querySelectorAll('pre code').forEach((block) => {
                                                 hljs.highlightBlock(block);
                                             });
-                                            // Hacer scroll suave
-                                            smoothScrollToBottom();
+
+                                            // Si el usuario está scrolleando, mantener su posición
+                                            if (isUserScrolling) {
+                                                window.scrollTo(0, currentScroll);
+                                            }
                                         } catch (renderError) {
                                             showErrorNotification(`Error al renderizar el contenido: ${renderError.message}`);
                                         }
+                                    } else if (data.status === 'cancelled') {
+                                        stopButton.classList.add('hidden');
+                                        showErrorNotification('Generación detenida por el usuario');
+                                        break;
                                     } else if (data.error) {
-                                        showErrorNotification(`Error del servidor: ${data.error}`);
+                                        showErrorNotification(data.error);
                                     }
-                                } 
+                                }
                             } catch (parseError) {
-                                showErrorNotification(`Error al procesar la línea de datos: ${parseError.message}`);
+                                console.error('Error al parsear línea:', parseError);
                             }
                         }
-                    } catch (readError) {
-                        showErrorNotification(`Error al leer el stream: ${readError.message}`);
-                        break;
+                    } catch (error) {
+                        if (error.name === 'AbortError') {
+                            console.log('Stream abortado por el usuario');
+                            break;
+                        }
+                        throw error;
                     }
                 }
 
             } catch (error) {
-                showErrorNotification(`Error al realizar la búsqueda: ${error.message}`);
+                if (error.name === 'AbortError') {
+                    showErrorNotification('Generación detenida por el usuario');
+                } else {
+                    showErrorNotification(`Error al realizar la búsqueda: ${error.message}`);
+                }
             } finally {
                 loading.style.display = 'none';
+                stopButton.classList.add('hidden');
+                controller = null;
             }
         });
     </script>

@@ -13,9 +13,11 @@ import requests
 import json
 import os
 import socket
-from typing import List
+from typing import List, Dict
 import logging
 from datetime import datetime
+import asyncio
+from collections import defaultdict
 
 # Configurar logging
 logging.basicConfig(
@@ -91,6 +93,9 @@ class SearchQuery(BaseModel):
 class OllamaQuery(BaseModel):
     query: str
 
+# Almacenamiento para los controladores de streaming activos
+active_streams: Dict[str, asyncio.Task] = {}
+
 def connect_to_milvus():
     """Establece conexión con Milvus"""
     try:
@@ -107,9 +112,10 @@ def connect_to_milvus():
 def search_patterns(query_text: str, top_k: int = 5):
     """Realiza búsqueda semántica en Milvus"""
     try:
+        
         logger.info(f"Iniciando búsqueda de patrones para: '{query_text}'")
         logger.info("Cargando modelo de embeddings...")
-        model = SentenceTransformer("all-MiniLM-L6-v2")
+        model = SentenceTransformer("nomic-embed-text:latest")
         logger.info("Generando embedding para la consulta...")
         query_embedding = model.encode(query_text)
         
@@ -148,6 +154,7 @@ def search_patterns(query_text: str, top_k: int = 5):
                 }
                 
                 # Si el patrón está deprecado, buscar sus reemplazos
+                logger.info(f"Patrón {pattern['pattern_id']} tiene status {pattern['status']}")
                 if pattern["status"] == "DEPRECATED":
                     logger.info(f"Patrón {pattern['pattern_id']} está deprecado, buscando reemplazos...")
                     replacement_patterns = find_replacement_patterns(pattern["description"])
@@ -297,21 +304,37 @@ async def ollama_query(query_data: OllamaQuery):
         logger.error(f"Error en el endpoint /ollama/query: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/ollama/stop/{stream_id}")
+async def stop_generation(stream_id: str):
+    """Endpoint para detener la generación de un stream específico"""
+    try:
+        if stream_id in active_streams:
+            # Cancelar la tarea de streaming
+            active_streams[stream_id].cancel()
+            del active_streams[stream_id]
+            return {"status": "success", "message": "Generación detenida exitosamente"}
+        return {"status": "error", "message": "Stream no encontrado"}
+    except Exception as e:
+        logger.error(f"Error al detener la generación: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/ollama/query/stream")
 async def ollama_query_stream(query_data: OllamaQuery):
     """Endpoint que integra la búsqueda en Milvus con Ollama usando streaming"""
     try:
         logger.info(f"Recibida nueva consulta streaming: '{query_data.query}'")
         
+        # Generar un ID único para este stream
+        stream_id = f"stream_{datetime.now().timestamp()}"
+        
         # Primero, buscar patrones relevantes
         logger.info("Iniciando búsqueda de patrones en Milvus")
         results = search_patterns(query_data.query, top_k=3)
         
-        # Enviar los patrones primero
         async def generate():
             try:
                 # Enviar los patrones relevantes inmediatamente
-                yield f"data: {json.dumps({'patterns': results}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'patterns': results, 'stream_id': stream_id}, ensure_ascii=False)}\n\n"
                 
                 # Crear prompt para Ollama
                 logger.info("Preparando prompt para Ollama")
@@ -353,13 +376,24 @@ async def ollama_query_stream(query_data: OllamaQuery):
                 
                 yield "data:\n\n"
                 
+            except asyncio.CancelledError:
+                logger.info(f"Stream {stream_id} cancelado por el usuario")
+                yield f"data: {json.dumps({'status': 'cancelled'}, ensure_ascii=False)}\n\n"
             except Exception as e:
                 logger.error(f"Error en el streaming: {str(e)}")
                 try:
                     yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"                    
                 except:
                     yield "data:\n\n"
+            finally:
+                if stream_id in active_streams:
+                    del active_streams[stream_id]
         
+        # Crear y almacenar la tarea de streaming
+        stream_task = asyncio.create_task(generate())
+        active_streams[stream_id] = stream_task
+        
+        # Retornar el StreamingResponse con el generador
         return StreamingResponse(
             generate(),
             media_type="text/event-stream",

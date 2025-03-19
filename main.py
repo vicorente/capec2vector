@@ -23,7 +23,7 @@ XML_FILE_PATH = os.path.join("capec_latest", "capec_v3.9.xml")
 MILVUS_HOST = "localhost"
 MILVUS_PORT = 19530
 COLLECTION_NAME = "capec_patterns"
-DIMENSION = 384  # Dimensión del embedding de all-MiniLM-L6-v2
+DIMENSION = 384  # Dimensión del embedding de nomic-embed-text:latest
 
 def create_milvus_collection():
     """Crea la colección en Milvus"""
@@ -180,7 +180,7 @@ def main():
 
         # Generar embeddings
         logger.info("Generando embeddings...")
-        model = SentenceTransformer("all-MiniLM-L6-v2")
+        model = SentenceTransformer("nomic-embed-text:latest")
 
         # Crear textos combinados para embedding
         texts = [
