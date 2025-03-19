@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi import Request
 from pydantic import BaseModel
@@ -249,7 +249,7 @@ async def ollama_query(query_data: OllamaQuery):
         
         # Primero, buscar patrones relevantes
         logger.info("Iniciando búsqueda de patrones en Milvus")
-        results = search_patterns(query_data.query, top_k=3)
+        results = search_patterns(query_data.query, top_k=1)
         
         # Crear prompt para Ollama
         logger.info("Preparando prompt para Ollama")
@@ -295,6 +295,82 @@ async def ollama_query(query_data: OllamaQuery):
         
     except Exception as e:
         logger.error(f"Error en el endpoint /ollama/query: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/ollama/query/stream")
+async def ollama_query_stream(query_data: OllamaQuery):
+    """Endpoint que integra la búsqueda en Milvus con Ollama usando streaming"""
+    try:
+        logger.info(f"Recibida nueva consulta streaming: '{query_data.query}'")
+        
+        # Primero, buscar patrones relevantes
+        logger.info("Iniciando búsqueda de patrones en Milvus")
+        results = search_patterns(query_data.query, top_k=3)
+        
+        # Enviar los patrones primero
+        async def generate():
+            try:
+                # Enviar los patrones relevantes inmediatamente
+                yield f"data: {json.dumps({'patterns': results}, ensure_ascii=False)}\n\n"
+                
+                # Crear prompt para Ollama
+                logger.info("Preparando prompt para Ollama")
+                prompt = create_ollama_prompt(results)
+                
+                # Realizar consulta a Ollama usando el cliente con streaming
+                response = ollama_client.chat(
+                    model="qwen2.5:72b",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": f"""
+                            Eres un experto en ciberseguridad que analiza patrones de ataque CAPEC y proporciona respuestas detalladas y útiles.
+                            Elabora las respuestas en formato markdown, con resaltado de código, listas, tablas, y aplicando saltos de linea para mejorar la legibilidad.
+                            """
+                        },
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
+                    stream=True,
+                    options={"temperature": 0.7}
+                )
+                
+                # Procesar la respuesta en streaming
+                for chunk in response:
+                    if chunk and "message" in chunk and "content" in chunk["message"]:
+                        # Escapar caracteres especiales y asegurar que el JSON sea válido
+                        content = chunk["message"]["content"]
+                        try:
+                            # Intentar codificar y decodificar para asegurar que el contenido es válido
+                            content = content.encode('utf-8').decode('utf-8')
+                            data = {"chunk": content}
+                            yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+                        except Exception as e:
+                            logger.error(f"Error al procesar chunk: {str(e)}")
+                            continue
+                
+                yield "data:\n\n"
+                
+            except Exception as e:
+                logger.error(f"Error en el streaming: {str(e)}")
+                try:
+                    yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"                    
+                except:
+                    yield "data:\n\n"
+        
+        return StreamingResponse(
+            generate(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error en el endpoint /ollama/query/stream: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
