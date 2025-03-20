@@ -112,10 +112,9 @@ def connect_to_milvus():
 def search_patterns(query_text: str, top_k: int = 5):
     """Realiza búsqueda semántica en Milvus"""
     try:
-        
         logger.info(f"Iniciando búsqueda de patrones para: '{query_text}'")
         logger.info("Cargando modelo de embeddings...")
-        model = SentenceTransformer("nomic-embed-text:latest")
+        model = SentenceTransformer("all-MiniLM-L6-v2")
         logger.info("Generando embedding para la consulta...")
         query_embedding = model.encode(query_text)
         

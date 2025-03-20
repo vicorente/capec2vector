@@ -23,7 +23,7 @@ XML_FILE_PATH = os.path.join("capec_latest", "capec_v3.9.xml")
 MILVUS_HOST = "localhost"
 MILVUS_PORT = 19530
 COLLECTION_NAME = "capec_patterns"
-DIMENSION = 384  # Dimensión del embedding de nomic-embed-text:latest
+DIMENSION = 384  # Dimensión del embedding de all-MiniLM-L6-v2
 
 def create_milvus_collection():
     """Crea la colección en Milvus"""
@@ -142,11 +142,7 @@ def main():
         # Verificar si el archivo existe
         if not os.path.exists(XML_FILE_PATH):
             logger.error(f"Error: El archivo XML no se encuentra en: {XML_FILE_PATH}")
-            return
-
-        # Conectar a Milvus
-        connections.connect(host=MILVUS_HOST, port=MILVUS_PORT)
-        logger.info("Conectado a Milvus")
+            return       
 
         # Crear colección en Milvus
         collection = create_milvus_collection()
@@ -180,7 +176,7 @@ def main():
 
         # Generar embeddings
         logger.info("Generando embeddings...")
-        model = SentenceTransformer("nomic-embed-text:latest")
+        model = SentenceTransformer("all-MiniLM-L6-v2")
 
         # Crear textos combinados para embedding
         texts = [
