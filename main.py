@@ -6,12 +6,16 @@ import numpy as np
 import logging
 from datetime import datetime
 
-# Configurar logging
+# Configura el logging básico con:
+# - Nivel INFO para los mensajes
+# - Formato que incluye fecha/hora, nivel y mensaje
+# - Formato de fecha personalizado
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
+# Crea un logger específico para este módulo
 logger = logging.getLogger(__name__)
 
 # docker run -d --name milvus_standalone -p 19530:19530 -p 19121:19121 milvusdb/milvus:latest
