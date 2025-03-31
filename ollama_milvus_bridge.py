@@ -330,6 +330,7 @@ async def ollama_query_stream(query_data: OllamaQuery):
         logger.info("Iniciando búsqueda de patrones en Milvus")
         results = search_patterns(query_data.query, top_k=3)
         
+        # Crear y almacenar la tarea de streaming
         async def generate():
             try:
                 # Enviar los patrones relevantes inmediatamente
@@ -388,11 +389,7 @@ async def ollama_query_stream(query_data: OllamaQuery):
                 if stream_id in active_streams:
                     del active_streams[stream_id]
         
-        # Crear y almacenar la tarea de streaming
-        stream_task = asyncio.create_task(generate())
-        active_streams[stream_id] = stream_task
-        
-        # Retornar el StreamingResponse con el generador
+        # No crear la tarea aquí, solo retornar el StreamingResponse directamente
         return StreamingResponse(
             generate(),
             media_type="text/event-stream",
