@@ -27,7 +27,7 @@ XML_FILE_PATH = os.path.join("capec_latest", "capec_v3.9.xml")
 MILVUS_HOST = "localhost"
 MILVUS_PORT = 19530
 COLLECTION_NAME = "capec_patterns"
-DIMENSION = 384  # Dimensión del embedding de all-MiniLM-L6-v2
+DIMENSION = 768  # Dimensión del embedding de nomic
 
 def create_milvus_collection():
     """Crea la colección en Milvus"""
@@ -44,19 +44,18 @@ def create_milvus_collection():
         # Definir el esquema de la colección
         fields = [
             FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
-            FieldSchema(name="pattern_id", dtype=DataType.VARCHAR, max_length=50),
-            FieldSchema(name="name", dtype=DataType.VARCHAR, max_length=500),
-            FieldSchema(name="description", dtype=DataType.VARCHAR, max_length=65535),
-            FieldSchema(name="status", dtype=DataType.VARCHAR, max_length=50),
-            FieldSchema(name="abstraction", dtype=DataType.VARCHAR, max_length=50),
-            FieldSchema(name="typical_severity", dtype=DataType.VARCHAR, max_length=50),
-            FieldSchema(name="typical_likelihood", dtype=DataType.VARCHAR, max_length=50),
-            FieldSchema(name="typical_attack_vectors", dtype=DataType.VARCHAR, max_length=1000),
-            FieldSchema(name="typical_attack_prerequisites", dtype=DataType.VARCHAR, max_length=1000),
-            FieldSchema(name="typical_resources_required", dtype=DataType.VARCHAR, max_length=1000),
-            FieldSchema(name="typical_attack_mitigations", dtype=DataType.VARCHAR, max_length=1000),
-            FieldSchema(name="typical_attack_examples", dtype=DataType.VARCHAR, max_length=1000),
-            FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=DIMENSION)
+            FieldSchema(name="pattern_id", dtype=DataType.VARCHAR, max_length=20),  # Ajustado según el tamaño típico de un ID
+            FieldSchema(name="name", dtype=DataType.VARCHAR, max_length=200),  # Ajustado según el tamaño máximo observado en nombres
+            FieldSchema(name="description", dtype=DataType.VARCHAR, max_length=10000),  # Ajustado para descripciones largas
+            FieldSchema(name="status", dtype=DataType.VARCHAR, max_length=20),  # Ajustado según los valores posibles de estado
+            FieldSchema(name="abstraction", dtype=DataType.VARCHAR, max_length=20),  # Ajustado según los valores posibles de abstracción
+            FieldSchema(name="Typical_Severity", dtype=DataType.VARCHAR, max_length=30),  # Ajustado según los valores posibles de severidad
+            FieldSchema(name="Likelihood_Of_Attack", dtype=DataType.VARCHAR, max_length=30),  # Ajustado según los valores posibles de probabilidad
+            FieldSchema(name="Prerequisites", dtype=DataType.VARCHAR, max_length=2000),  # Ajustado para listas largas de prerrequisitos
+            FieldSchema(name="Resources_Required", dtype=DataType.VARCHAR, max_length=2000),  # Ajustado para listas largas de recursos
+            FieldSchema(name="Mitigations", dtype=DataType.VARCHAR, max_length=2000),  # Ajustado para listas largas de mitigaciones
+            FieldSchema(name="Example_Instances", dtype=DataType.VARCHAR, max_length=5000),  # Ajustado para listas largas de ejemplos
+            FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=DIMENSION)  # Dimensión fija para embeddings
         ]
         
         schema = CollectionSchema(fields=fields, description="CAPEC Attack Patterns")
@@ -103,39 +102,31 @@ def extract_attack_pattern(pattern, namespace):
         severity = pattern.find("capec:Typical_Severity", namespace)
         severity_text = severity.text if severity is not None else "Not Specified"
 
-        # Obtener vectores de ataque
-        attack_vectors = pattern.find("capec:Typical_Attack_Vectors", namespace)
-        attack_vectors_text = ", ".join([v.text for v in attack_vectors]) if attack_vectors is not None else ""
+        # Obtener elementos usando los nombres correctos del XML
+        prerequisites = pattern.find("capec:Prerequisites", namespace)
+        prerequisites_text = ", ".join([p.text for p in prerequisites]) if prerequisites is not None and len(prerequisites) > 0 else ""
 
-        # Obtener prerrequisitos
-        prerequisites = pattern.find("capec:Typical_Attack_Prerequisites", namespace)
-        prerequisites_text = ", ".join([p.text for p in prerequisites]) if prerequisites is not None else ""
+        resources = pattern.find("capec:Resources_Required", namespace)
+        resources_text = ", ".join([r.text for r in resources]) if resources is not None and len(resources) > 0 else ""
 
-        # Obtener recursos requeridos
-        resources = pattern.find("capec:Typical_Resources_Required", namespace)
-        resources_text = ", ".join([r.text for r in resources]) if resources is not None else ""
+        mitigations = pattern.find("capec:Mitigations", namespace)
+        mitigations_text = ", ".join([m.text for m in mitigations]) if mitigations is not None and len(mitigations) > 0 else ""
 
-        # Obtener mitigaciones
-        mitigations = pattern.find("capec:Typical_Attack_Mitigations", namespace)
-        mitigations_text = ", ".join([m.text for m in mitigations]) if mitigations is not None else ""
-
-        # Obtener ejemplos
-        examples = pattern.find("capec:Typical_Attack_Examples", namespace)
-        examples_text = ", ".join([e.text for e in examples]) if examples is not None else ""
+        examples = pattern.find("capec:Example_Instances", namespace)
+        examples_text = ", ".join([e.text for e in examples]) if examples is not None and len(examples) > 0 else ""
 
         return {
-            "pattern_id": pattern_id,
+            "pattern_id": "CAPEC-" + pattern_id,
             "name": pattern_name,
             "description": description_text,
             "status": pattern_status,
             "abstraction": pattern_abstraction,
-            "typical_severity": severity_text,
-            "typical_likelihood": likelihood_text,
-            "typical_attack_vectors": attack_vectors_text,
-            "typical_attack_prerequisites": prerequisites_text,
-            "typical_resources_required": resources_text,
-            "typical_attack_mitigations": mitigations_text,
-            "typical_attack_examples": examples_text
+            "Typical_Severity": severity_text,
+            "Likelihood_Of_Attack": likelihood_text,
+            "Prerequisites": prerequisites_text,
+            "Resources_Required": resources_text,
+            "Mitigations": mitigations_text,
+            "Example_Instances": examples_text
         }
     except AttributeError as e:
         logger.error(f"Error procesando patrón: {e}")
@@ -180,7 +171,7 @@ def main():
 
         # Generar embeddings
         logger.info("Generando embeddings...")
-        model = SentenceTransformer("all-MiniLM-L6-v2")
+        model = SentenceTransformer("nomic-ai/nomic-embed-text-v1", trust_remote_code=True)
 
         # Crear textos combinados para embedding
         texts = [

@@ -88,13 +88,24 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 class SearchQuery(BaseModel):
     query: str
-    top_k: int = 5
+    top_k: int = 10 # Número de resultados a devolver. Para devolver ilimitados usar 0
 
 class OllamaQuery(BaseModel):
     query: str
 
 # Almacenamiento para los controladores de streaming activos
 active_streams: Dict[str, asyncio.Task] = {}
+
+# Variable global para el modelo
+model = None
+
+def get_embedding_model():
+    """Singleton para el modelo de embeddings"""
+    global model
+    if model is None:
+        logger.info("Inicializando modelo de embeddings...")
+        model = SentenceTransformer("nomic-ai/nomic-embed-text-v1", trust_remote_code=True)
+    return model
 
 def connect_to_milvus():
     """Establece conexión con Milvus"""
@@ -113,64 +124,91 @@ def search_patterns(query_text: str, top_k: int = 5):
     """Realiza búsqueda semántica en Milvus"""
     try:
         logger.info(f"Iniciando búsqueda de patrones para: '{query_text}'")
-        logger.info("Cargando modelo de embeddings...")
-        model = SentenceTransformer("all-MiniLM-L6-v2")
+
+        # Usar el singleton del modelo
+        model = get_embedding_model()
+
+        # Generar embedding solo para la consulta
         logger.info("Generando embedding para la consulta...")
         query_embedding = model.encode(query_text)
-        
+
+        # Conectar a Milvus
         collection = connect_to_milvus()
-        
+
+        # Parámetros de búsqueda optimizados
         search_params = {
             "metric_type": "L2",
-            "params": {"nprobe": 10}
+            "params": {
+                "nprobe": 10,  # Número de clusters a buscar
+                "ef": 64      # Factor de exploración
+            }
         }
-        
+
+        # Realizar búsqueda vectorial
         logger.info(f"Realizando búsqueda en Milvus con top_k={top_k}")
         results = collection.search(
             data=[query_embedding.tolist()],
             anns_field="embedding",
             param=search_params,
-            limit=top_k,
-            output_fields=["pattern_id", "name", "description", "status", "typical_severity", "typical_likelihood", "typical_attack_vectors", "typical_attack_prerequisites", "typical_resources_required", "typical_attack_mitigations", "typical_attack_examples"]
+            limit=top_k * 2,  # Duplicar límite para compensar patrones deprecados
+            output_fields=[
+                "pattern_id",
+                "name",
+                "description",
+                "status",
+                "Typical_Severity",
+                "Likelihood_Of_Attack",
+                "Prerequisites",
+                "Resources_Required",
+                "Mitigations",
+                "Example_Instances",
+            ],
         )
-        
+
+        # Procesar resultados
         formatted_results = []
+        deprecated_patterns = []
+
         for hits in results:
             for hit in hits:
                 pattern = {
-                    "pattern_id": hit.entity.pattern_id,
-                    "name": hit.entity.name,
-                    "description": hit.entity.description,
-                    "similarity_score": 1 - hit.score,
-                    "status": hit.entity.status,
-                    "typical_severity": hit.entity.typical_severity,
-                    "typical_likelihood": hit.entity.typical_likelihood,
-                    "typical_attack_vectors": hit.entity.typical_attack_vectors,
-                    "typical_attack_prerequisites": hit.entity.typical_attack_prerequisites,
-                    "typical_resources_required": hit.entity.typical_resources_required,
-                    "typical_attack_mitigations": hit.entity.typical_attack_mitigations,
-                    "typical_attack_examples": hit.entity.typical_attack_examples
+                    "pattern_id": hit.entity.get("pattern_id"),
+                    "name": hit.entity.get("name"),
+                    "description": hit.entity.get("description"),
+                    "similarity_score": float(1 - hit.score),  # Convertir a float para serialización
+                    "status": hit.entity.get("status"),
+                    "typical_severity": hit.entity.get("Typical_Severity"),
+                    "likelihood": hit.entity.get("Likelihood_Of_Attack"),
+                    "prerequisites": hit.entity.get("Prerequisites"),
+                    "resources_required": hit.entity.get("Resources_Required"),
+                    "mitigations": hit.entity.get("Mitigations"),
+                    "examples": hit.entity.get("Example_Instances"),
                 }
-                
-                # Si el patrón está deprecado, buscar sus reemplazos
-                logger.info(f"Patrón {pattern['pattern_id']} tiene status {pattern['status']}")
-                if pattern["status"] == "DEPRECATED":
-                    logger.info(f"Patrón {pattern['pattern_id']} está deprecado, buscando reemplazos...")
-                    replacement_patterns = find_replacement_patterns(pattern["description"])
-                    if replacement_patterns:
-                        logger.info(f"Encontrados {len(replacement_patterns)} patrones de reemplazo")
-                        formatted_results.extend(replacement_patterns)
-                    else:
-                        logger.warning(f"No se encontraron patrones de reemplazo para {pattern['pattern_id']}")
-                
-                formatted_results.append(pattern)
-        
-        logger.info(f"Búsqueda completada. Encontrados {len(formatted_results)} patrones")
-        return formatted_results
-    
+
+                # Validar el estado del patrón
+                if pattern["status"] and pattern["status"].lower() == "deprecated":
+                    logger.info(f"Patrón deprecado encontrado: {pattern['pattern_id']}")
+                    deprecated_patterns.append(pattern)
+                else:
+                    logger.info(f"Patrón encontrado: {pattern['pattern_id']}")
+                    formatted_results.append(pattern)
+
+        # Si tenemos menos resultados que top_k, buscar reemplazos
+        if len(formatted_results) < top_k:
+            for deprecated_pattern in deprecated_patterns:
+                replacements = find_replacement_patterns(deprecated_pattern["description"])
+                for replacement in replacements:
+                    if len(formatted_results) >= top_k:
+                        break
+                    if not any(r["pattern_id"] == replacement["pattern_id"] for r in formatted_results):
+                        formatted_results.append(replacement)
+                        logger.info(f"Agregado patrón de reemplazo: {replacement['pattern_id']}")
+
+        return formatted_results[:top_k]
+
     except Exception as e:
         logger.error(f"Error durante la búsqueda: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error durante la búsqueda: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         logger.info("Cerrando conexión con Milvus")
         connections.disconnect("default")
@@ -255,7 +293,7 @@ async def ollama_query(query_data: OllamaQuery):
         
         # Primero, buscar patrones relevantes
         logger.info("Iniciando búsqueda de patrones en Milvus")
-        results = search_patterns(query_data.query, top_k=1)
+        results = search_patterns(query_data.query, top_k=10)
         
         # Crear prompt para Ollama
         logger.info("Preparando prompt para Ollama")
@@ -322,73 +360,81 @@ async def ollama_query_stream(query_data: OllamaQuery):
     """Endpoint que integra la búsqueda en Milvus con Ollama usando streaming"""
     try:
         logger.info(f"Recibida nueva consulta streaming: '{query_data.query}'")
-        
+
         # Generar un ID único para este stream
         stream_id = f"stream_{datetime.now().timestamp()}"
-        
+
         # Primero, buscar patrones relevantes
         logger.info("Iniciando búsqueda de patrones en Milvus")
-        results = search_patterns(query_data.query, top_k=3)
-        
+        results = search_patterns(query_data.query, top_k=10)
+
         # Crear y almacenar la tarea de streaming
         async def generate():
             try:
                 # Enviar los patrones relevantes inmediatamente
-                yield f"data: {json.dumps({'patterns': results, 'stream_id': stream_id}, ensure_ascii=False)}\n\n"
-                
+                # logger.info(f"resultados encontrados: {results}")
+                simplified_results = [
+                    {
+                        "pattern_id": pattern["pattern_id"],
+                        "name": pattern["name"],                       
+                    }
+                    for pattern in results
+                ]
+                yield f"data: {json.dumps({'patterns': simplified_results, 'stream_id': stream_id}, ensure_ascii=False)}\n\n"
+
                 # Crear prompt para Ollama
-                logger.info("Preparando prompt para Ollama")
-                prompt = create_ollama_prompt(results)
-                
-                # Realizar consulta a Ollama usando el cliente con streaming
-                response = ollama_client.chat(
-                    model="qwen2.5:72b",
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": f"""
-                            Eres un experto en ciberseguridad que analiza patrones de ataque CAPEC y proporciona respuestas detalladas y útiles.
-                            Elabora las respuestas en formato markdown, con resaltado de código, listas, tablas, y aplicando saltos de linea para mejorar la legibilidad.
-                            """
-                        },
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
-                    ],
-                    stream=True,
-                    options={"temperature": 0.7}
-                )
-                
-                # Procesar la respuesta en streaming
-                for chunk in response:
-                    if chunk and "message" in chunk and "content" in chunk["message"]:
-                        # Escapar caracteres especiales y asegurar que el JSON sea válido
-                        content = chunk["message"]["content"]
-                        try:
-                            # Intentar codificar y decodificar para asegurar que el contenido es válido
-                            content = content.encode('utf-8').decode('utf-8')
-                            data = {"chunk": content}
-                            yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
-                        except Exception as e:
-                            logger.error(f"Error al procesar chunk: {str(e)}")
-                            continue
-                
+                # logger.info("Preparando prompt para Ollama")
+                # prompt = create_ollama_prompt(results)
+
+                # # Realizar consulta a Ollama usando el cliente con streaming
+                # response = ollama_client.chat(
+                #     model="qwen2.5:72b",
+                #     messages=[
+                #         {
+                #             "role": "system",
+                #             "content": f"""
+                #             Eres un experto en ciberseguridad que analiza patrones de ataque CAPEC y proporciona respuestas detalladas y útiles.
+                #             Elabora las respuestas en formato markdown, con resaltado de código, listas, tablas, y aplicando saltos de linea para mejorar la legibilidad.
+                #             """
+                #         },
+                #         {
+                #             "role": "user",
+                #             "content": prompt
+                #         }
+                #     ],
+                #     stream=True,
+                #     options={"temperature": 0.7}
+                # )
+
+                # # Procesar la respuesta en streaming
+                # for chunk in response:
+                #     if chunk and "message" in chunk and "content" in chunk["message"]:
+                #         # Escapar caracteres especiales y asegurar que el JSON sea válido
+                #         content = chunk["message"]["content"]
+                #         try:
+                #             # Intentar codificar y decodificar para asegurar que el contenido es válido
+                #             content = content.encode('utf-8').decode('utf-8')
+                #             data = {"chunk": content}
+                #             yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+                #         except Exception as e:
+                #             logger.error(f"Error al procesar chunk: {str(e)}")
+                #             continue
+
                 yield "data:\n\n"
-                
+
             except asyncio.CancelledError:
                 logger.info(f"Stream {stream_id} cancelado por el usuario")
                 yield f"data: {json.dumps({'status': 'cancelled'}, ensure_ascii=False)}\n\n"
             except Exception as e:
                 logger.error(f"Error en el streaming: {str(e)}")
                 try:
-                    yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"                    
+                    yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
                 except:
                     yield "data:\n\n"
             finally:
                 if stream_id in active_streams:
                     del active_streams[stream_id]
-        
+
         # No crear la tarea aquí, solo retornar el StreamingResponse directamente
         return StreamingResponse(
             generate(),
@@ -398,7 +444,7 @@ async def ollama_query_stream(query_data: OllamaQuery):
                 "Connection": "keep-alive",
             }
         )
-        
+
     except Exception as e:
         logger.error(f"Error en el endpoint /ollama/query/stream: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -419,4 +465,4 @@ if __name__ == "__main__":
         proxy_headers=True,
         forwarded_allow_ips="*",
         log_level="info"
-    ) 
+    )
