@@ -59,16 +59,18 @@
                 </div>
 
                 <div id="patternDetails" class="max-w-4xl mx-auto bg-white rounded-lg shadow-lg p-6 mb-8 hidden">
-                    <div class="flex justify-between items-center mb-4">
-                        <h2 class="text-2xl font-bold text-gray-800">
-                            <i class="fas fa-shield-alt text-blue-600 mr-2"></i>
-                            <span id="patternTitle"></span>
-                        </h2>
+                    <div class="flex justify-end mb-4">
                         <button onclick="hidePatternDetails()"
                             class="px-3 py-1 bg-gray-600 text-white rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500">
                             <i class="fas fa-times mr-2"></i>
                             Cerrar
                         </button>
+                    </div>
+                    <div class="mb-4">
+                        <h2 class="text-2xl font-bold text-gray-800">
+                            <i class="fas fa-shield-alt text-blue-600 mr-2"></i>
+                            <span id="patternTitle"></span>
+                        </h2>
                     </div>
                     <div class="prose prose-sm sm:prose lg:prose-lg max-w-none markdown-content" id="patternContent">
                     </div>
@@ -98,6 +100,12 @@
             },
             langPrefix: 'hljs language-'
         });
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
 
         function showErrorNotification(message) {
             const notification = document.createElement('div');
@@ -135,24 +143,24 @@
             let content = `
 ### Descripción
                 
-${data.patterns[index].description}
+${escapeHtml(data.patterns[index].description)}
 
 ### Severidad
 
-- **Severidad típica**: ${data.patterns[index].pattern_id || 'No especificada'}
-- **Probabilidad de ataque**: ${data.patterns[index].pattern_id || 'No especificada'}
+- **Severidad típica**: ${escapeHtml(data.patterns[index].pattern_id) || 'No especificada'}
+- **Probabilidad de ataque**: ${escapeHtml(data.patterns[index].pattern_id) || 'No especificada'}
 
 ### Prerequisitos
-${data.patterns[index].pattern_id || 'No especificados'}
+${escapeHtml(data.patterns[index].pattern_id) || 'No especificados'}
 
 ### Recursos Requeridos
-${data.patterns[index].pattern_id || 'No especificados'}
+${escapeHtml(data.patterns[index].pattern_id) || 'No especificados'}
 
 ### Mitigaciones
-${data.patterns[index].pattern_id || 'No especificadas'}
+${escapeHtml(data.patterns[index].pattern_id) || 'No especificadas'}
 
 ### Ejemplos
-${data.patterns[index].pattern_id || 'No hay ejemplos disponibles'}
+${escapeHtml(data.patterns[index].pattern_id) || 'No hay ejemplos disponibles'}
 
 
                 `;
@@ -164,9 +172,6 @@ ${data.patterns[index].pattern_id || 'No hay ejemplos disponibles'}
             document.querySelectorAll('pre code').forEach((block) => {
                 hljs.highlightBlock(block);
             });
-
-            // Scroll suave hasta los detalles
-            detailsDiv.scrollIntoView({ behavior: 'smooth' });
         }
 
         function hidePatternDetails() {
