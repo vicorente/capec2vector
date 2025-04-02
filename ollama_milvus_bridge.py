@@ -357,68 +357,24 @@ async def stop_generation(stream_id: str):
 
 @app.post("/ollama/query/stream")
 async def ollama_query_stream(query_data: OllamaQuery):
-    """Endpoint que integra la búsqueda en Milvus con Ollama usando streaming"""
     try:
         logger.info(f"Recibida nueva consulta streaming: '{query_data.query}'")
-
-        # Generar un ID único para este stream
         stream_id = f"stream_{datetime.now().timestamp()}"
-
-        # Primero, buscar patrones relevantes
         logger.info("Iniciando búsqueda de patrones en Milvus")
         results = search_patterns(query_data.query, top_k=10)
 
-        # Crear y almacenar la tarea de streaming
         async def generate():
             try:
-                # Enviar los patrones relevantes inmediatamente
-                # logger.info(f"resultados encontrados: {results}")
-                simplified_results = [
+                # Enviar los patrones relevantes con todos sus detalles
+                patterns_with_details = [
                     {
                         "pattern_id": pattern["pattern_id"],
-                        "name": pattern["name"],                       
+                        "name": pattern["name"],
+                        "description": pattern["description"]
                     }
                     for pattern in results
                 ]
-                yield f"data: {json.dumps({'patterns': simplified_results, 'stream_id': stream_id}, ensure_ascii=False)}\n\n"
-
-                # Crear prompt para Ollama
-                # logger.info("Preparando prompt para Ollama")
-                # prompt = create_ollama_prompt(results)
-
-                # # Realizar consulta a Ollama usando el cliente con streaming
-                # response = ollama_client.chat(
-                #     model="qwen2.5:72b",
-                #     messages=[
-                #         {
-                #             "role": "system",
-                #             "content": f"""
-                #             Eres un experto en ciberseguridad que analiza patrones de ataque CAPEC y proporciona respuestas detalladas y útiles.
-                #             Elabora las respuestas en formato markdown, con resaltado de código, listas, tablas, y aplicando saltos de linea para mejorar la legibilidad.
-                #             """
-                #         },
-                #         {
-                #             "role": "user",
-                #             "content": prompt
-                #         }
-                #     ],
-                #     stream=True,
-                #     options={"temperature": 0.7}
-                # )
-
-                # # Procesar la respuesta en streaming
-                # for chunk in response:
-                #     if chunk and "message" in chunk and "content" in chunk["message"]:
-                #         # Escapar caracteres especiales y asegurar que el JSON sea válido
-                #         content = chunk["message"]["content"]
-                #         try:
-                #             # Intentar codificar y decodificar para asegurar que el contenido es válido
-                #             content = content.encode('utf-8').decode('utf-8')
-                #             data = {"chunk": content}
-                #             yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
-                #         except Exception as e:
-                #             logger.error(f"Error al procesar chunk: {str(e)}")
-                #             continue
+                yield f"data: {json.dumps({'patterns': patterns_with_details, 'stream_id': stream_id}, ensure_ascii=False)}\n\n"
 
                 yield "data:\n\n"
 
@@ -435,7 +391,6 @@ async def ollama_query_stream(query_data: OllamaQuery):
                 if stream_id in active_streams:
                     del active_streams[stream_id]
 
-        # No crear la tarea aquí, solo retornar el StreamingResponse directamente
         return StreamingResponse(
             generate(),
             media_type="text/event-stream",

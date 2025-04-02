@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,10 +11,12 @@
     <link href="/static/styles.css" rel="stylesheet">
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
 </head>
+
 <body class="bg-gray-100 min-h-screen">
     <div class="flex">
         <!-- Menú lateral -->
-        <div id="patternsSidebar" class="hidden md:block w-64 bg-white shadow-lg h-screen fixed left-0 top-0 overflow-y-auto">
+        <div id="patternsSidebar"
+            class="hidden md:block w-64 bg-white shadow-lg h-screen fixed left-0 top-0 overflow-y-auto">
             <div class="p-4 border-b">
                 <h2 class="text-lg font-semibold text-gray-800">
                     <i class="fas fa-list text-blue-600 mr-2"></i>
@@ -39,13 +42,11 @@
                 <div class="max-w-3xl mx-auto bg-white rounded-lg shadow-lg p-6 mb-8">
                     <form id="searchForm" class="space-y-4">
                         <div class="flex gap-4">
-                            <input type="text" 
-                                   id="query" 
-                                   name="query" 
-                                   class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                   placeholder="Describe el tipo de ataque que buscas...">
-                            <button type="submit" 
-                                    class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <input type="text" id="query" name="query"
+                                class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                placeholder="Describe el tipo de ataque que buscas...">
+                            <button type="submit"
+                                class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
                                 <i class="fas fa-search mr-2"></i>Buscar
                             </button>
                         </div>
@@ -53,6 +54,22 @@
                 </div>
 
                 <div id="results" class="max-w-4xl mx-auto space-y-6">
+                    <div id="patternDetails" class="bg-white rounded-lg shadow-lg p-6 mb-8 hidden">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-2xl font-bold text-gray-800">
+                                <i class="fas fa-shield-alt text-blue-600 mr-2"></i>
+                                <span id="patternTitle"></span>
+                            </h2>
+                            <button onclick="hidePatternDetails()"
+                                class="px-3 py-1 bg-gray-600 text-white rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500">
+                                <i class="fas fa-times mr-2"></i>
+                                Cerrar
+                            </button>
+                        </div>
+                        <div class="prose prose-sm sm:prose lg:prose-lg max-w-none markdown-content"
+                            id="patternContent">
+                        </div>
+                    </div>
                     <!-- Los resultados se insertarán aquí -->
                 </div>
             </div>
@@ -72,7 +89,7 @@
     <script>
         // Configurar marked para usar highlight.js
         marked.setOptions({
-            highlight: function(code, lang) {
+            highlight: function (code, lang) {
                 if (lang && hljs.getLanguage(lang)) {
                     return hljs.highlight(code, { language: lang }).value;
                 }
@@ -100,12 +117,59 @@
                 </div>
             `;
             document.body.appendChild(notification);
-            
-            // Auto-eliminar después de 5 segundos
+
             setTimeout(() => {
                 notification.style.animation = 'slideOut 0.3s ease-out';
                 setTimeout(() => notification.remove(), 300);
             }, 5000);
+        }
+
+        function showPatternDetails(pattern) {
+            const detailsDiv = document.getElementById('patternDetails');
+            const titleSpan = document.getElementById('patternTitle');
+            const contentDiv = document.getElementById('patternContent');
+            console.log(pattern);
+            titleSpan.textContent = `${pattern.name} (${pattern.pattern_id})`;
+
+            let content = `
+                ### Descripción
+                ${pattern.description}
+
+### Severidad y Probabilidad
+- **Severidad típica**: ${pattern.typical_severity || 'No especificada'}
+- **Probabilidad de ataque**: ${pattern.likelihood || 'No especificada'}
+
+### Prerequisitos
+${pattern.prerequisites || 'No especificados'}
+
+### Recursos Requeridos
+${pattern.resources_required || 'No especificados'}
+
+### Mitigaciones
+${pattern.mitigations || 'No especificadas'}
+
+### Ejemplos
+${pattern.examples || 'No hay ejemplos disponibles'}
+
+### Puntuación de Similitud
+${(pattern.similarity_score * 100).toFixed(2)}%
+`;
+
+            contentDiv.innerHTML = marked.parse(content);
+            detailsDiv.classList.remove('hidden');
+
+            // Resaltar código si existe
+            document.querySelectorAll('pre code').forEach((block) => {
+                hljs.highlightBlock(block);
+            });
+
+            // Scroll suave hasta los detalles
+            detailsDiv.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function hidePatternDetails() {
+            const detailsDiv = document.getElementById('patternDetails');
+            detailsDiv.classList.add('hidden');
         }
 
         document.getElementById('searchForm').addEventListener('submit', async (e) => {
@@ -114,7 +178,7 @@
             const loading = document.getElementById('loading');
             const results = document.getElementById('results');
             const patternsList = document.getElementById('patternsList');
-            
+
             // Mostrar loading
             loading.style.display = 'block';
             results.innerHTML = '';
@@ -127,12 +191,10 @@
                         <div class="flex justify-between items-center mb-4">
                             <h2 class="text-2xl font-bold text-gray-800">
                                 <i class="fas fa-robot text-green-600 mr-2"></i>
-                                Respuesta del Asistente
+                                Patrón
                             </h2>
                             <button id="scrollToBottom" class="px-3 py-1 bg-gray-600 text-white rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500">
-                                <i class="fas fa-arrow-down mr-2"></i>
-                                Ir al final
-                            </button>
+                                <i class="fas fa-arrow-down mr-2"></i></button>
                         </div>
                         <div class="prose prose-sm sm:prose lg:prose-lg max-w-none markdown-content" id="streaming-response">
                         </div>
@@ -148,79 +210,44 @@
                 let lastScrollPosition = 0;
                 let controller = null;
 
-                // Función para scroll instantáneo al final
-                function scrollToBottom() {
-                    window.scrollTo({
-                        top: document.documentElement.scrollHeight,
-                        behavior: 'instant'
-                    });
-                }
-
-                // Detectar scroll manual del usuario
-                window.addEventListener('scroll', () => {
-                    if (scrollTimeout) clearTimeout(scrollTimeout);
-                    
-                    const currentScrollPosition = window.scrollY;
-                    const isScrollingUp = currentScrollPosition < lastScrollPosition;
-                    lastScrollPosition = currentScrollPosition;
-                    
-                    const isAtBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 100;
-                    isUserScrolling = !isAtBottom;
-                });
-
-                // Configurar botón de scroll al final
-                document.getElementById('scrollToBottom').addEventListener('click', () => {
-                    scrollToBottom();
-                });
-
-                // Realizar la petición POST con streaming
-                controller = new AbortController();
+                // Configurar la fuente de eventos con método POST
                 const response = await fetch('/ollama/query/stream', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ query }),
-                    signal: controller.signal
+                    body: JSON.stringify({ query: query })
                 });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                // Desactivar el elemento de espera cuando comienza el streaming
-                loading.style.display = 'none';
 
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
-                
-                while (true) {
-                    try {
-                        const {value, done} = await reader.read();
-                        if (done) break;
 
-                        const chunk = decoder.decode(value);
-                        const lines = chunk.split('\n');
-                        
-                        for (const line of lines) {
-                            try {
-                                if (line.startsWith('data: ')) {
-                                    const data = JSON.parse(line.slice(6)); // Eliminar 'data: ' del inicio
-                                    
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+
+                    const text = decoder.decode(value);
+                    const lines = text.split('\n');
+
+                    for (const line of lines) {
+                        if (line.trim().startsWith('data: ')) {
+                            const jsonStr = line.replace('data: ', '').trim();
+                            if (jsonStr) {
+                                try {
+                                    const data = JSON.parse(jsonStr);
                                     if (data.patterns && !patternsReceived) {
                                         try {
-                                            // Crear elementos para los patrones
+                                            // Crear elementos para los patrones con evento de click
                                             const patternsListHTML = data.patterns.map((pattern, index) => `
                                                 <div class="mb-4">
-                                                    <a href="https://capec.mitre.org/data/definitions/${pattern.pattern_id}.html" 
-                                                       target="_blank"
-                                                       class="block p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                                                    <button onclick='showPatternDetails(${JSON.stringify(pattern)})'
+                                                            class="w-full text-left p-2 rounded-lg hover:bg-gray-100 transition-colors">
                                                         <div class="text-sm font-medium text-gray-800">${pattern.name}</div>
                                                         <div class="text-xs text-gray-500">ID: ${pattern.pattern_id}</div>
-                                                    </a>
+                                                    </button>
                                                 </div>
                                             `).join('');
-                                            
+
                                             patternsList.innerHTML = patternsListHTML;
                                             patternsReceived = true;
                                         } catch (patternError) {
@@ -250,15 +277,11 @@
                                     } else if (data.error) {
                                         showErrorNotification(data.error);
                                     }
+                                } catch (parseError) {
+                                    console.error('Error al parsear línea:', parseError);
                                 }
-                            } catch (parseError) {
-                                console.log(line);
-
-                                console.error('Error al parsear línea:', parseError);
                             }
                         }
-                    } catch (error) {
-                        throw error;
                     }
                 }
 
@@ -269,6 +292,32 @@
                 controller = null;
             }
         });
+
+        // Función para scroll instantáneo al final
+        function scrollToBottom() {
+            window.scrollTo({
+                top: document.documentElement.scrollHeight,
+                behavior: 'instant'
+            });
+        }
+
+        // Detectar scroll manual del usuario
+        window.addEventListener('scroll', () => {
+            if (scrollTimeout) clearTimeout(scrollTimeout);
+
+            const currentScrollPosition = window.scrollY;
+            const isScrollingUp = currentScrollPosition < lastScrollPosition;
+            lastScrollPosition = currentScrollPosition;
+
+            const isAtBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 100;
+            isUserScrolling = !isAtBottom;
+        });
+
+        // Configurar botón de scroll al final
+        document.getElementById('scrollToBottom').addEventListener('click', () => {
+            scrollToBottom();
+        });
     </script>
 </body>
+
 </html>
