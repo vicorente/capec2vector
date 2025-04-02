@@ -374,9 +374,7 @@ async def ollama_query_stream(query_data: OllamaQuery):
                     }
                     for pattern in results
                 ]
-                yield f"data: {json.dumps({'patterns': patterns_with_details, 'stream_id': stream_id}, ensure_ascii=False)}\n\n"
-
-                yield "data:\n\n"
+                yield f"data: {json.dumps({'patterns': patterns_with_details, 'stream_id': stream_id}, ensure_ascii=False)}"               
 
             except asyncio.CancelledError:
                 logger.info(f"Stream {stream_id} cancelado por el usuario")

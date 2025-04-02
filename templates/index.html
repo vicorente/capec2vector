@@ -24,6 +24,11 @@
                 </h2>
             </div>
             <div id="patternsList" class="p-4">
+                <!-- Loading indicator for sidebar -->
+                <div id="sidebarLoading" class="hidden text-center py-4">
+                    <i class="fas fa-spinner fa-spin text-2xl text-blue-600"></i>
+                    <p class="text-sm text-gray-600 mt-2">Cargando patrones...</p>
+                </div>
                 <!-- Los patrones se insertarán aquí -->
             </div>
         </div>
@@ -53,24 +58,20 @@
                     </form>
                 </div>
 
-                <div id="results" class="max-w-4xl mx-auto space-y-6">
-                    <div id="patternDetails" class="bg-white rounded-lg shadow-lg p-6 mb-8 hidden">
-                        <div class="flex justify-between items-center mb-4">
-                            <h2 class="text-2xl font-bold text-gray-800">
-                                <i class="fas fa-shield-alt text-blue-600 mr-2"></i>
-                                <span id="patternTitle"></span>
-                            </h2>
-                            <button onclick="hidePatternDetails()"
-                                class="px-3 py-1 bg-gray-600 text-white rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500">
-                                <i class="fas fa-times mr-2"></i>
-                                Cerrar
-                            </button>
-                        </div>
-                        <div class="prose prose-sm sm:prose lg:prose-lg max-w-none markdown-content"
-                            id="patternContent">
-                        </div>
+                <div id="patternDetails" class="max-w-4xl mx-auto bg-white rounded-lg shadow-lg p-6 mb-8 hidden">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-2xl font-bold text-gray-800">
+                            <i class="fas fa-shield-alt text-blue-600 mr-2"></i>
+                            <span id="patternTitle"></span>
+                        </h2>
+                        <button onclick="hidePatternDetails()"
+                            class="px-3 py-1 bg-gray-600 text-white rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500">
+                            <i class="fas fa-times mr-2"></i>
+                            Cerrar
+                        </button>
                     </div>
-                    <!-- Los resultados se insertarán aquí -->
+                    <div class="prose prose-sm sm:prose lg:prose-lg max-w-none markdown-content" id="patternContent">
+                    </div>
                 </div>
             </div>
         </div>
@@ -124,36 +125,37 @@
             }, 5000);
         }
 
-        function showPatternDetails(pattern) {
+        function showPatternDetails(index) {
             const detailsDiv = document.getElementById('patternDetails');
             const titleSpan = document.getElementById('patternTitle');
             const contentDiv = document.getElementById('patternContent');
-            console.log(pattern);
-            titleSpan.textContent = `${pattern.name} (${pattern.pattern_id})`;
+            console.log(data.patterns[index]);
+            titleSpan.textContent = `(${data.patterns[index].pattern_id}) ${data.patterns[index].name}`;
 
             let content = `
-                ### Descripción
-                ${pattern.description}
+### Descripción
+                
+${data.patterns[index].description}
 
-### Severidad y Probabilidad
-- **Severidad típica**: ${pattern.typical_severity || 'No especificada'}
-- **Probabilidad de ataque**: ${pattern.likelihood || 'No especificada'}
+### Severidad
+
+- **Severidad típica**: ${data.patterns[index].pattern_id || 'No especificada'}
+- **Probabilidad de ataque**: ${data.patterns[index].pattern_id || 'No especificada'}
 
 ### Prerequisitos
-${pattern.prerequisites || 'No especificados'}
+${data.patterns[index].pattern_id || 'No especificados'}
 
 ### Recursos Requeridos
-${pattern.resources_required || 'No especificados'}
+${data.patterns[index].pattern_id || 'No especificados'}
 
 ### Mitigaciones
-${pattern.mitigations || 'No especificadas'}
+${data.patterns[index].pattern_id || 'No especificadas'}
 
 ### Ejemplos
-${pattern.examples || 'No hay ejemplos disponibles'}
+${data.patterns[index].pattern_id || 'No hay ejemplos disponibles'}
 
-### Puntuación de Similitud
-${(pattern.similarity_score * 100).toFixed(2)}%
-`;
+
+                `;
 
             contentDiv.innerHTML = marked.parse(content);
             detailsDiv.classList.remove('hidden');
@@ -171,46 +173,19 @@ ${(pattern.similarity_score * 100).toFixed(2)}%
             const detailsDiv = document.getElementById('patternDetails');
             detailsDiv.classList.add('hidden');
         }
-
+        var data = ''; // Variable para almacenar los datos de la búsqueda
         document.getElementById('searchForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const query = document.getElementById('query').value;
-            const loading = document.getElementById('loading');
-            const results = document.getElementById('results');
+            const sidebarLoading = document.getElementById('sidebarLoading');
             const patternsList = document.getElementById('patternsList');
+            hidePatternDetails();
 
-            // Mostrar loading
-            loading.style.display = 'block';
-            results.innerHTML = '';
+            // Mostrar loading en el sidebar
+            sidebarLoading.classList.remove('hidden');
             patternsList.innerHTML = '';
-
+            patternsList.appendChild(sidebarLoading);
             try {
-                // Crear un contenedor para la respuesta
-                results.innerHTML = `
-                    <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
-                        <div class="flex justify-between items-center mb-4">
-                            <h2 class="text-2xl font-bold text-gray-800">
-                                <i class="fas fa-robot text-green-600 mr-2"></i>
-                                Patrón
-                            </h2>
-                            <button id="scrollToBottom" class="px-3 py-1 bg-gray-600 text-white rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500">
-                                <i class="fas fa-arrow-down mr-2"></i></button>
-                        </div>
-                        <div class="prose prose-sm sm:prose lg:prose-lg max-w-none markdown-content" id="streaming-response">
-                        </div>
-                    </div>
-                `;
-
-                // Inicializar el contenedor de respuesta
-                const responseContainer = document.getElementById('streaming-response');
-                let fullResponse = '';
-                let patternsReceived = false;
-                let isUserScrolling = false;
-                let scrollTimeout = null;
-                let lastScrollPosition = 0;
-                let controller = null;
-
-                // Configurar la fuente de eventos con método POST
                 const response = await fetch('/ollama/query/stream', {
                     method: 'POST',
                     headers: {
@@ -227,20 +202,19 @@ ${(pattern.similarity_score * 100).toFixed(2)}%
                     if (done) break;
 
                     const text = decoder.decode(value);
-                    const lines = text.split('\n');
-
-                    for (const line of lines) {
-                        if (line.trim().startsWith('data: ')) {
-                            const jsonStr = line.replace('data: ', '').trim();
-                            if (jsonStr) {
+                    const jsonStr = text.replace('data: ', '').trim();
+                    if (jsonStr) {
+                        try {
+                            data = JSON.parse(jsonStr);
+                            if (data.patterns) {
                                 try {
-                                    const data = JSON.parse(jsonStr);
-                                    if (data.patterns && !patternsReceived) {
-                                        try {
-                                            // Crear elementos para los patrones con evento de click
-                                            const patternsListHTML = data.patterns.map((pattern, index) => `
+                                    // Ocultar el loading
+                                    sidebarLoading.classList.add('hidden');
+
+                                    // Crear elementos para los patrones con evento de click
+                                    const patternsListHTML = data.patterns.map((pattern, index) => `
                                                 <div class="mb-4">
-                                                    <button onclick='showPatternDetails(${JSON.stringify(pattern)})'
+                                                    <button onclick='showPatternDetails(${index})'
                                                             class="w-full text-left p-2 rounded-lg hover:bg-gray-100 transition-colors">
                                                         <div class="text-sm font-medium text-gray-800">${pattern.name}</div>
                                                         <div class="text-xs text-gray-500">ID: ${pattern.pattern_id}</div>
@@ -248,48 +222,25 @@ ${(pattern.similarity_score * 100).toFixed(2)}%
                                                 </div>
                                             `).join('');
 
-                                            patternsList.innerHTML = patternsListHTML;
-                                            patternsReceived = true;
-                                        } catch (patternError) {
-                                            showErrorNotification(`Error al procesar los patrones: ${patternError.message}`);
-                                        }
-                                    } else if (data.chunk) {
-                                        try {
-                                            // Agregar el nuevo chunk a la respuesta
-                                            fullResponse += data.chunk;
-                                            // Actualizar el contenido con markdown renderizado
-                                            responseContainer.innerHTML = marked.parse(fullResponse);
-                                            // Resaltar el código
-                                            document.querySelectorAll('pre code').forEach((block) => {
-                                                hljs.highlightBlock(block);
-                                            });
-
-                                            // Hacer scroll automático si el usuario no está scrolleando manualmente
-                                            if (!isUserScrolling) {
-                                                window.scrollTo({
-                                                    top: document.documentElement.scrollHeight,
-                                                    behavior: 'smooth'
-                                                });
-                                            }
-                                        } catch (renderError) {
-                                            showErrorNotification(`Error al renderizar el contenido: ${renderError.message}`);
-                                        }
-                                    } else if (data.error) {
-                                        showErrorNotification(data.error);
-                                    }
-                                } catch (parseError) {
-                                    console.error('Error al parsear línea:', parseError);
+                                    patternsList.innerHTML = patternsListHTML;
+                                } catch (patternError) {
+                                    showErrorNotification(`Error al procesar los patrones: ${patternError.message}`);
                                 }
+                            } else if (data.error) {
+                                showErrorNotification(data.error);
                             }
+                        } catch (parseError) {
+                            console.error('Error al parsear línea:', parseError);
                         }
                     }
+
+
                 }
 
             } catch (error) {
                 showErrorNotification(`Error al realizar la búsqueda: ${error.message}`);
             } finally {
-                loading.style.display = 'none';
-                controller = null;
+                sidebarLoading.classList.add('hidden');
             }
         });
 
@@ -301,6 +252,8 @@ ${(pattern.similarity_score * 100).toFixed(2)}%
             });
         }
 
+        let scrollTimeout = null;
+        var lastScrollPosition = 0;
         // Detectar scroll manual del usuario
         window.addEventListener('scroll', () => {
             if (scrollTimeout) clearTimeout(scrollTimeout);
