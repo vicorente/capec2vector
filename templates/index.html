@@ -59,7 +59,12 @@
                 </div>
 
                 <div id="patternDetails" class="max-w-4xl mx-auto bg-white rounded-lg shadow-lg p-6 mb-8 hidden">
-                    <div class="flex justify-end mb-4">
+                    <div class="flex justify-between mb-4">
+                        <button onclick="askAI()"
+                            class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <i class="fas fa-robot mr-2"></i>
+                            Consulta IA
+                        </button>
                         <button onclick="hidePatternDetails()"
                             class="px-3 py-1 bg-gray-600 text-white rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500">
                             <i class="fas fa-times mr-2"></i>
@@ -73,6 +78,22 @@
                         </h2>
                     </div>
                     <div class="prose prose-sm sm:prose lg:prose-lg max-w-none markdown-content" id="patternContent">
+                    </div>
+                    
+                    <!-- Nueva sección para la respuesta de la IA -->
+                    <div id="aiResponseSection" class="hidden mt-8 w-full">
+                        <hr class="my-6 border-gray-200" />
+                        <h3 class="text-xl font-bold text-gray-800 mb-4">
+                            <i class="fas fa-robot text-blue-600 mr-2"></i>
+                            Análisis de la IA
+                        </h3>
+                        <div id="aiResponseContent" class="prose prose-sm sm:prose lg:prose-lg xl:prose-xl max-w-none bg-gray-50 p-6 rounded-lg shadow-inner">
+                            <div id="aiResponseLoading" class="hidden text-center py-4">
+                                <i class="fas fa-spinner fa-spin text-2xl text-blue-600"></i>
+                                <p class="text-sm text-gray-600 mt-2">Analizando el patrón...</p>
+                            </div>
+                            <div id="aiResponseText" class="whitespace-pre-wrap break-words"></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -134,6 +155,7 @@
         }
 
         function showPatternDetails(index) {
+            currentPatternIndex = index;
             const detailsDiv = document.getElementById('patternDetails');
             const titleSpan = document.getElementById('patternTitle');
             const contentDiv = document.getElementById('patternContent');
@@ -271,10 +293,148 @@ ${escapeHtml(data.patterns[index].pattern_id) || 'No hay ejemplos disponibles'}
             isUserScrolling = !isAtBottom;
         });
 
-        // Configurar botón de scroll al final
-        document.getElementById('scrollToBottom').addEventListener('click', () => {
-            scrollToBottom();
-        });
+        // Función para consultar a la IA sobre el patrón actual
+        async function askAI() {
+            const aiResponseSection = document.getElementById('aiResponseSection');
+            const aiResponseLoading = document.getElementById('aiResponseLoading');
+            const aiResponseText = document.getElementById('aiResponseText');
+            
+            // Mostrar la sección y el loading
+            aiResponseSection.classList.remove('hidden');
+            aiResponseLoading.classList.remove('hidden');
+            aiResponseText.innerHTML = '';
+
+            let accumulatedText = '';
+
+            try {
+                const currentPattern = data.patterns[currentPatternIndex];
+                const prompt = `Analiza el siguiente patrón de ataque y proporciona un análisis detallado incluyendo:
+                1. Un resumen del patrón
+                2. Los escenarios más comunes donde se podría encontrar
+                3. Proporciona ejemplos de ataques, utilizando para ello Python o comandos de terminal, o cualquier otra forma.
+                4. Nivel de riesgo y complejidad del ataque
+                5. Recomendaciones específicas de mitigación
+                
+                Patrón:
+                ID: ${currentPattern.pattern_id}
+                Nombre: ${currentPattern.name}
+                Descripción: ${currentPattern.description}
+                
+                Elabora la respuesta utilizando formato markdown y resaltando el código en caso de que lo haya.
+                `;
+
+                
+                const response = await fetch('/ollama/analyze', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ 
+                        prompt: prompt,
+                        pattern_id: currentPattern.pattern_id
+                    })
+                });
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                let updateTimeout;
+                const updateContent = () => {
+                    if (accumulatedText.trim()) {
+                        aiResponseText.innerHTML = marked.parse(accumulatedText);
+                        // Scroll suave solo si estamos cerca del final
+                        const isNearBottom = window.innerHeight + window.pageYOffset >= document.documentElement.offsetHeight - 100;
+                        if (isNearBottom) {
+                            window.scrollTo({
+                                top: document.documentElement.scrollHeight,
+                                behavior: 'smooth'
+                            });
+                        }
+                    }
+                };
+
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+
+                    const text = decoder.decode(value);
+                    const lines = text.split('\n');
+                    
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const content = line.replace('data: ', '').trim();
+                            if (content) {
+                                try {
+                                    const data = JSON.parse(content);
+                                    if (data.response) {
+                                        accumulatedText += data.response;
+                                        // Actualizar el contenido con throttling
+                                        clearTimeout(updateTimeout);
+                                        updateTimeout = setTimeout(updateContent, 100);
+                                    }
+                                } catch (e) {
+                                    console.error('Error parsing JSON:', e);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Asegurarse de que se muestre el último contenido
+                updateContent();
+
+            } catch (error) {
+                aiResponseText.innerHTML = marked.parse('⚠️ Error al consultar la IA: ' + error.message);
+            } finally {
+                aiResponseLoading.classList.add('hidden');
+            }
+        }
+
+        // Variable para mantener el índice del patrón actual
+        let currentPatternIndex = 0;
+
+        // Actualizar la función showPatternDetails para guardar el índice actual
+        function showPatternDetails(index) {
+            currentPatternIndex = index;
+            const detailsDiv = document.getElementById('patternDetails');
+            const titleSpan = document.getElementById('patternTitle');
+            const contentDiv = document.getElementById('patternContent');
+            console.log(data.patterns[index]);
+            titleSpan.textContent = `(${data.patterns[index].pattern_id}) ${data.patterns[index].name}`;
+
+            let content = `
+### Descripción
+                
+${escapeHtml(data.patterns[index].description)}
+
+### Severidad
+
+- **Severidad típica**: ${escapeHtml(data.patterns[index].pattern_id) || 'No especificada'}
+- **Probabilidad de ataque**: ${escapeHtml(data.patterns[index].pattern_id) || 'No especificada'}
+
+### Prerequisitos
+${escapeHtml(data.patterns[index].pattern_id) || 'No especificados'}
+
+### Recursos Requeridos
+${escapeHtml(data.patterns[index].pattern_id) || 'No especificados'}
+
+### Mitigaciones
+${escapeHtml(data.patterns[index].pattern_id) || 'No especificadas'}
+
+### Ejemplos
+${escapeHtml(data.patterns[index].pattern_id) || 'No hay ejemplos disponibles'}
+
+
+                `;
+
+            contentDiv.innerHTML = marked.parse(content);
+            detailsDiv.classList.remove('hidden');
+
+            // Resaltar código si existe
+            document.querySelectorAll('pre code').forEach((block) => {
+                hljs.highlightBlock(block);
+            });
+        }
     </script>
 </body>
 

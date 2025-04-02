@@ -48,6 +48,9 @@ class SearchResponse(BaseModel):
     answer: str
     relevant_patterns: List[Pattern]
 
+class OllamaPrompt(BaseModel):
+    prompt: str
+
 def find_available_port(start_port=8000, max_port=8999):
     """Encuentra un puerto disponible en el rango especificado"""
     for port in range(start_port, max_port + 1):
@@ -400,6 +403,62 @@ async def ollama_query_stream(query_data: OllamaQuery):
 
     except Exception as e:
         logger.error(f"Error en el endpoint /ollama/query/stream: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/ollama/analyze")
+async def analyze_pattern(prompt_data: OllamaPrompt):
+    """Endpoint para analizar un patrón específico usando Ollama"""
+    try:
+        logger.info("Recibida solicitud de análisis de patrón")
+        data = prompt_data.model_dump()
+        prompt = data.get('prompt')
+        pattern_id = data.get('pattern_id')  # Obtener el pattern_id del request
+
+        if not prompt:
+            raise HTTPException(status_code=400, detail="No prompt provided")
+
+        response = ollama_client.chat(
+            model="qwen2.5:72b",
+            messages=[
+                {
+                    "role": "system",
+                    "content": """
+                    Eres un experto en ciberseguridad especializado en analizar patrones de ataque CAPEC.
+                    Proporciona análisis detallados y útiles, enfocándote en aspectos prácticos y aplicables.
+                    Elabora las respuestas en formato markdown, usando listas, tablas y resaltado cuando sea apropiado.
+                    Todas las enumeraciones formatealas como listas.
+                    """
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            stream=True,
+            options={"temperature": 0.7}
+        )
+
+        async def generate():
+            try:
+                for chunk in response:
+                    if chunk and "message" in chunk and "content" in chunk["message"]:
+                        content = chunk["message"]["content"]
+                        yield f"data: {json.dumps({'response': content, 'pattern_id': pattern_id}, ensure_ascii=False)}\n\n"
+            except Exception as e:
+                logger.error(f"Error en el streaming del análisis: {str(e)}")
+                yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+
+        return StreamingResponse(
+            generate(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Error en el endpoint /ollama/analyze: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
