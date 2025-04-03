@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 MILVUS_HOST = "localhost"
 MILVUS_PORT = 19530
 COLLECTION_NAME = "capec_patterns"
-OLLAMA_HOST = "http://172.16.5.180:11434"
+OLLAMA_HOST = "http://172.16.11.224:11434"
 HOST = "0.0.0.0"  # Permite conexiones desde cualquier IP
 
 # Inicializar cliente de Ollama
@@ -306,7 +306,7 @@ async def ollama_query(query_data: OllamaQuery):
         # Realizar consulta a Ollama usando el cliente
         response: ChatResponse = ollama_client.chat(
             #model="deepseek-r1:70b",
-            model="qwen2.5:72b",
+            model="qwen2.5-coder:7b",
             messages=[
                 {
                     "role": "system",
@@ -464,22 +464,19 @@ Según el siguiente patrón de ataque CAPEC con ID {pattern_id} y las siguientes
 
         logger.info(f"{enriched_prompt}")
         response = ollama_client.chat(
-            model="qwen2.5:72b",
+            model="qwen2.5-coder:7b",
             messages=[
                 {
                     "role": "system",
                     "content": """
                     Eres un experto en ciberseguridad especializado en analizar patrones de ataque CAPEC.
                     Proporciona análisis detallados y útiles, enfocándote en aspectos prácticos y aplicables.                    
-                    """
+                    """,
                 },
-                {
-                    "role": "user",
-                    "content": enriched_prompt
-                }
+                {"role": "user", "content": enriched_prompt},
             ],
             stream=True,
-            options={"temperature": 0.7}
+            options={"temperature": 0.7},
         )
 
         async def generate():

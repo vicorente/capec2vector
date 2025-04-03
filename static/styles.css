@@ -5,8 +5,8 @@
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.5);
-    z-index: 1000;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 9999;
 }
 
 .loading-content {
@@ -27,85 +27,87 @@
 }
 
 /* Estilos para el contenido markdown */
-.markdown-content {
+.prose.markdown-content {
     color: #374151;
     line-height: 1.6;
 }
 
-.markdown-content h1,
-.markdown-content h2,
-.markdown-content h3,
-.markdown-content h4,
-.markdown-content h5,
-.markdown-content h6 {
+.prose.markdown-content h1 {
+    font-size: 2.25rem;
+    font-weight: 700;
+    color: #1F2937;
+    margin-bottom: 1.5rem;
+    margin-top: 2rem;
+}
+
+.prose.markdown-content h2 {
+    font-size: 1.875rem;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 1rem;
+    margin-top: 1.5rem;
+}
+
+.prose.markdown-content h3 {
+    font-size: 1.5rem;
+    font-weight: 500;
+    color: #4B5563;
+    margin-bottom: 0.75rem;
+    margin-top: 1rem;
+}
+
+.prose.markdown-content h4,
+.prose.markdown-content h5,
+.prose.markdown-content h6 {
     color: #1F2937;
     margin-top: 1.5em;
     margin-bottom: 0.5em;
     font-weight: 600;
 }
 
-.markdown-content h1 { font-size: 1.875em; }
-.markdown-content h2 { font-size: 1.5em; }
-.markdown-content h3 { font-size: 1.25em; }
-
-.markdown-content p {
-    margin-bottom: 1em;
+.prose.markdown-content p {
+    margin-bottom: 1rem;
+    color: #374151;
 }
 
-.markdown-content ul,
-.markdown-content ol {
-    margin-bottom: 1em;
-    padding-left: 1.5em;
+.prose.markdown-content ul {
+    list-style-type: disc;
+    margin-left: 1.5rem;
+    margin-bottom: 1rem;
 }
 
-.markdown-content li {
-    margin-bottom: 0.5em;
+.prose.markdown-content ol {
+    list-style-type: decimal;
+    margin-left: 1.5rem;
+    margin-bottom: 1rem;
 }
 
-.markdown-content code {
+.prose.markdown-content li {
+    color: #374151;
+    margin-bottom: 0.5rem;
+}
+
+.prose.markdown-content code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.875rem;
     background-color: #F3F4F6;
-    padding: 0.2em 0.4em;
-    border-radius: 0.25em;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    padding: 0.2rem 0.4rem;
+    border-radius: 0.25rem;
 }
 
-.markdown-content pre {
+.prose.markdown-content pre {
     background-color: #1F2937;
-    padding: 1em;
-    border-radius: 0.5em;
+    border-radius: 0.5rem;
+    padding: 1rem;
     overflow-x: auto;
-    margin: 1em 0;
+    margin: 1rem 0;
 }
 
-.markdown-content pre code {
+.prose.markdown-content pre code {
     background-color: transparent;
     padding: 0;
     color: #E5E7EB;
-}
-
-.markdown-content blockquote {
-    border-left: 4px solid #E5E7EB;
-    padding-left: 1em;
-    margin: 1em 0;
-    color: #6B7280;
-}
-
-.markdown-content table {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 1em 0;
-}
-
-.markdown-content th,
-.markdown-content td {
-    border: 1px solid #E5E7EB;
-    padding: 0.5em;
-    text-align: left;
-}
-
-.markdown-content th {
-    background-color: #F3F4F6;
-    font-weight: 600;
+    font-size: 0.875rem;
 }
 
 /* Estilos para el resaltado de código */
@@ -158,31 +160,26 @@
 /* Estilos para las notificaciones */
 .notification {
     position: fixed;
-    top: 1rem;
-    right: 1rem;
+    top: 20px;
+    right: 20px;
     z-index: 1000;
-    max-width: 400px;
     animation: slideIn 0.3s ease-out;
 }
 
 @keyframes slideIn {
     from {
         transform: translateX(100%);
-        opacity: 0;
     }
     to {
         transform: translateX(0);
-        opacity: 1;
     }
 }
 
 @keyframes slideOut {
     from {
         transform: translateX(0);
-        opacity: 1;
     }
     to {
         transform: translateX(100%);
-        opacity: 0;
     }
-} 
+}
