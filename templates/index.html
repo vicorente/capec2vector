@@ -308,22 +308,16 @@ ${escapeHtml(data.patterns[index].pattern_id) || 'No hay ejemplos disponibles'}
 
             try {
                 const currentPattern = data.patterns[currentPatternIndex];
-                const prompt = `Analiza el siguiente patrón de ataque y proporciona un análisis detallado incluyendo:
-                1. Un resumen del patrón
-                2. Los escenarios más comunes donde se podría encontrar
-                3. Proporciona ejemplos de ataques, utilizando para ello Python o comandos de terminal, o cualquier otra forma.
-                4. Nivel de riesgo y complejidad del ataque
-                5. Recomendaciones específicas de mitigación
-                
-                Patrón:
-                ID: ${currentPattern.pattern_id}
-                Nombre: ${currentPattern.name}
-                Descripción: ${currentPattern.description}
-                
-                Elabora la respuesta utilizando formato markdown y resaltando el código en caso de que lo haya.
+                const prompt = `Analiza el patrón de ataque que te he indicado y proporciona un análisis detallado incluyendo:
+    - Un resumen del patrón
+    - Los escenarios más comunes donde se podría encontrar
+    - Nivel de riesgo y complejidad del ataque
+    - Recomendaciones específicas de mitigación
+    - Proporciona ejemplos de ataques, utilizando para ello Python o comandos de terminal, o cualquier otra forma.
+
+    Elabora la respuesta utilizando formato markdown y resaltando el código en caso de que lo haya.
                 `;
 
-                
                 const response = await fetch('/ollama/analyze', {
                     method: 'POST',
                     headers: {

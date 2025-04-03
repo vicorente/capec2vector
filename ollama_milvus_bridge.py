@@ -50,6 +50,7 @@ class SearchResponse(BaseModel):
 
 class OllamaPrompt(BaseModel):
     prompt: str
+    pattern_id: str  # Adding pattern_id as a required field
 
 def find_available_port(start_port=8000, max_port=8999):
     """Encuentra un puerto disponible en el rango especificado"""
@@ -381,13 +382,13 @@ async def ollama_query_stream(query_data: OllamaQuery):
 
             except asyncio.CancelledError:
                 logger.info(f"Stream {stream_id} cancelado por el usuario")
-                yield f"data: {json.dumps({'status': 'cancelled'}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'status': 'cancelled'}, ensure_ascii=False)}\n"
             except Exception as e:
                 logger.error(f"Error en el streaming: {str(e)}")
                 try:
-                    yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+                    yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n"
                 except:
-                    yield "data:\n\n"
+                    yield "data:\n"
             finally:
                 if stream_id in active_streams:
                     del active_streams[stream_id]
@@ -410,13 +411,58 @@ async def analyze_pattern(prompt_data: OllamaPrompt):
     """Endpoint para analizar un patrón específico usando Ollama"""
     try:
         logger.info("Recibida solicitud de análisis de patrón")
-        data = prompt_data.model_dump()
-        prompt = data.get('prompt')
-        pattern_id = data.get('pattern_id')  # Obtener el pattern_id del request
+        prompt = prompt_data.prompt
+        pattern_id = prompt_data.pattern_id
 
-        if not prompt:
-            raise HTTPException(status_code=400, detail="No prompt provided")
+        if not prompt or not pattern_id:
+            raise HTTPException(status_code=400, detail="Se requiere prompt y pattern_id")
 
+        # Buscar el patrón en Milvus
+        try:
+            collection = connect_to_milvus()
+            pattern_details = collection.query(
+                expr=f'pattern_id == "{pattern_id}"',
+                output_fields=[
+                    "pattern_id",
+                    "name",
+                    "description",
+                    "status",
+                    "Typical_Severity",
+                    "Likelihood_Of_Attack",
+                    "Prerequisites",
+                    "Resources_Required",
+                    "Mitigations",
+                    "Example_Instances",
+                ]
+            )
+            connections.disconnect("default")
+
+            if not pattern_details:
+                raise HTTPException(status_code=404, detail=f"Patrón {pattern_id} no encontrado")
+
+            pattern = pattern_details[0]
+            # Crear un contexto enriquecido con los detalles del patrón
+            enriched_prompt = f"""
+Según el siguiente patrón de ataque CAPEC con ID {pattern_id} y las siguientes características:
+
+- Name: {pattern.get('name')}
+- Description: {pattern.get('description')}
+- Status: {pattern.get('status')}
+- Severity: {pattern.get('Typical_Severity')}
+- Likelihood of Attack: {pattern.get('Likelihood_Of_Attack')}
+- Prerequisites: {pattern.get('Prerequisites')}
+- Resources Required: {pattern.get('Resources_Required')}
+- Mitigations: {pattern.get('Mitigations')}
+- Examples: {pattern.get('Example_Instances')}
+
+{prompt}
+"""
+
+        except Exception as e:
+            logger.error(f"Error al buscar en Milvus: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Error al buscar el patrón: {str(e)}")
+
+        logger.info(f"{enriched_prompt}")
         response = ollama_client.chat(
             model="qwen2.5:72b",
             messages=[
@@ -424,14 +470,12 @@ async def analyze_pattern(prompt_data: OllamaPrompt):
                     "role": "system",
                     "content": """
                     Eres un experto en ciberseguridad especializado en analizar patrones de ataque CAPEC.
-                    Proporciona análisis detallados y útiles, enfocándote en aspectos prácticos y aplicables.
-                    Elabora las respuestas en formato markdown, usando listas, tablas y resaltado cuando sea apropiado.
-                    Todas las enumeraciones formatealas como listas.
+                    Proporciona análisis detallados y útiles, enfocándote en aspectos prácticos y aplicables.                    
                     """
                 },
                 {
                     "role": "user",
-                    "content": prompt
+                    "content": enriched_prompt
                 }
             ],
             stream=True,
@@ -443,10 +487,10 @@ async def analyze_pattern(prompt_data: OllamaPrompt):
                 for chunk in response:
                     if chunk and "message" in chunk and "content" in chunk["message"]:
                         content = chunk["message"]["content"]
-                        yield f"data: {json.dumps({'response': content, 'pattern_id': pattern_id}, ensure_ascii=False)}\n\n"
+                        yield f"data: {json.dumps({'response': content, 'pattern_id': pattern_id}, ensure_ascii=False)}"
             except Exception as e:
                 logger.error(f"Error en el streaming del análisis: {str(e)}")
-                yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}"
 
         return StreamingResponse(
             generate(),
