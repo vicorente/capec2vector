@@ -92,7 +92,7 @@
                                 <i class="fas fa-spinner fa-spin text-2xl text-blue-600"></i>
                                 <p class="text-sm text-gray-600 mt-2">Analizando el patrón...</p>
                             </div>
-                            <div id="aiResponseText" class="whitespace-pre-wrap break-words"></div>
+                            <div id="aiResponseText" class="prose prose-sm sm:prose lg:prose-lg max-w-none markdown-content whitespace-pre-wrap break-words"></div>
                         </div>
                     </div>
                 </div>
@@ -154,56 +154,21 @@
             }, 5000);
         }
 
-        function showPatternDetails(index) {
-            currentPatternIndex = index;
-            const detailsDiv = document.getElementById('patternDetails');
-            const titleSpan = document.getElementById('patternTitle');
-            const contentDiv = document.getElementById('patternContent');
-            console.log(data.patterns[index]);
-            titleSpan.textContent = `(${data.patterns[index].pattern_id}) ${data.patterns[index].name}`;
+        // Variables globales
+        let data = null; // Cambiado de string a null
+        let currentPatternIndex = 0;
+        let isUserScrolling = false;
+        let lastScrollPosition = 0;
+        let scrollTimeout = null;
 
-            let content = `
-### Descripción
-                
-${escapeHtml(data.patterns[index].description)}
-
-### Severidad
-
-- **Severidad típica**: ${escapeHtml(data.patterns[index].pattern_id) || 'No especificada'}
-- **Probabilidad de ataque**: ${escapeHtml(data.patterns[index].pattern_id) || 'No especificada'}
-
-### Prerequisitos
-${escapeHtml(data.patterns[index].pattern_id) || 'No especificados'}
-
-### Recursos Requeridos
-${escapeHtml(data.patterns[index].pattern_id) || 'No especificados'}
-
-### Mitigaciones
-${escapeHtml(data.patterns[index].pattern_id) || 'No especificadas'}
-
-### Ejemplos
-${escapeHtml(data.patterns[index].pattern_id) || 'No hay ejemplos disponibles'}
-
-
-                `;
-
-            contentDiv.innerHTML = marked.parse(content);
-            detailsDiv.classList.remove('hidden');
-
-            // Resaltar código si existe
-            document.querySelectorAll('pre code').forEach((block) => {
-                hljs.highlightBlock(block);
-            });
-        }
-
-        function hidePatternDetails() {
-            const detailsDiv = document.getElementById('patternDetails');
-            detailsDiv.classList.add('hidden');
-        }
-        var data = ''; // Variable para almacenar los datos de la búsqueda
         document.getElementById('searchForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const query = document.getElementById('query').value;
+            if (!query.trim()) {
+                showErrorNotification('Por favor, introduce un término de búsqueda');
+                return;
+            }
+
             const sidebarLoading = document.getElementById('sidebarLoading');
             const patternsList = document.getElementById('patternsList');
             hidePatternDetails();
@@ -258,6 +223,7 @@ ${escapeHtml(data.patterns[index].pattern_id) || 'No hay ejemplos disponibles'}
                             }
                         } catch (parseError) {
                             console.error('Error al parsear línea:', parseError);
+                            console.log(text);
                         }
                     }
 
@@ -279,8 +245,6 @@ ${escapeHtml(data.patterns[index].pattern_id) || 'No hay ejemplos disponibles'}
             });
         }
 
-        let scrollTimeout = null;
-        var lastScrollPosition = 0;
         // Detectar scroll manual del usuario
         window.addEventListener('scroll', () => {
             if (scrollTimeout) clearTimeout(scrollTimeout);
@@ -299,10 +263,20 @@ ${escapeHtml(data.patterns[index].pattern_id) || 'No hay ejemplos disponibles'}
             const aiResponseLoading = document.getElementById('aiResponseLoading');
             const aiResponseText = document.getElementById('aiResponseText');
             
+            if (!aiResponseSection || !aiResponseLoading || !aiResponseText) {
+                console.error('Required elements not found');
+                return;
+            }
+
+            if (!data || !data.patterns || !data.patterns[currentPatternIndex]) {
+                showErrorNotification('No hay un patrón seleccionado para analizar');
+                return;
+            }
+            
             // Mostrar la sección y el loading
             aiResponseSection.classList.remove('hidden');
             aiResponseLoading.classList.remove('hidden');
-            aiResponseText.innerHTML = '';
+            aiResponseText.innerHTML = ''; // Clear previous content
             scrollToBottom();  
 
             let accumulatedText = '';
@@ -313,20 +287,49 @@ ${escapeHtml(data.patterns[index].pattern_id) || 'No hay ejemplos disponibles'}
                 const now = Date.now();
                 if (force || now - lastUpdateTime >= UPDATE_INTERVAL) {
                     if (accumulatedText.trim()) {
-                        aiResponseText.innerHTML = marked.parse(accumulatedText);
-                        // Resaltar código si existe
-                        aiResponseText.querySelectorAll('pre code').forEach((block) => {
-                            hljs.highlightBlock(block);
-                        });
-                        lastUpdateTime = now;
-                        
-                        // Scroll suave si estamos cerca del final
-                        const isNearBottom = window.innerHeight + window.pageYOffset >= document.documentElement.offsetHeight - 300;
-                        if (isNearBottom) {
-                            window.scrollTo({
-                                top: document.documentElement.scrollHeight,
-                                behavior: 'smooth'
+                        try {
+                            // Eliminar líneas en blanco múltiples, manteniendo solo una
+                            const processedText = accumulatedText.replace(/\n\s*\n/g, '\n');
+                            const formattedContent = marked.parse(processedText);
+                            aiResponseText.innerHTML = formattedContent;
+                            
+                            // Resaltar código si existe
+                            aiResponseText.querySelectorAll('pre code').forEach((block) => {
+                                try {
+                                    hljs.highlightBlock(block);
+                                } catch (e) {
+                                    console.error('Error highlighting code:', e);
+                                }
                             });
+                            
+                            // Aplicar estilos de markdown
+                            aiResponseText.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach(header => {
+                                header.classList.add('prose', 'markdown-content');
+                            });
+                            
+                            // Add markdown styling to paragraphs and lists
+                            aiResponseText.querySelectorAll('p, ul, ol, li, code, pre').forEach(element => {
+                                element.classList.add('prose', 'markdown-content');
+                            });
+                            
+                            // Add specific styling for code blocks
+                            aiResponseText.querySelectorAll('pre code').forEach(block => {
+                                block.parentElement.classList.add('prose', 'markdown-content');
+                                block.classList.add('hljs');
+                            });
+                            
+                            lastUpdateTime = now;
+                            
+                            // Scroll suave si estamos cerca del final
+                            const isNearBottom = window.innerHeight + window.pageYOffset >= document.documentElement.offsetHeight - 300;
+                            if (isNearBottom) {
+                                window.scrollTo({
+                                    top: document.documentElement.scrollHeight,
+                                    behavior: 'smooth'
+                                });
+                            }
+                        } catch (e) {
+                            console.error('Error updating content:', e);
                         }
                     }
                 }
@@ -334,6 +337,10 @@ ${escapeHtml(data.patterns[index].pattern_id) || 'No hay ejemplos disponibles'}
 
             try {
                 const currentPattern = data.patterns[currentPatternIndex];
+                if (!currentPattern || !currentPattern.pattern_id) {
+                    throw new Error('Patrón no válido');
+                }
+
                 const prompt = `Analiza el patrón de ataque que te he indicado y proporciona un análisis detallado incluyendo:
     - Un resumen del patrón
     - Los escenarios más comunes donde se podría encontrar
@@ -358,7 +365,7 @@ ${escapeHtml(data.patterns[index].pattern_id) || 'No hay ejemplos disponibles'}
                 });
 
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    throw new Error(`Error en la respuesta del servidor: ${response.status}`);
                 }
 
                 const reader = response.body.getReader();
@@ -386,6 +393,7 @@ ${escapeHtml(data.patterns[index].pattern_id) || 'No hay ejemplos disponibles'}
                                     }
                                 } catch (e) {
                                     console.error('Error parsing JSON:', e);
+                                    console.log(content);
                                 }
                             }
                         }
@@ -395,21 +403,36 @@ ${escapeHtml(data.patterns[index].pattern_id) || 'No hay ejemplos disponibles'}
             } catch (error) {
                 console.error('Error:', error);
                 aiResponseText.innerHTML = marked.parse('⚠️ Error al consultar la IA: ' + error.message);
+                showErrorNotification(`Error al consultar la IA: ${error.message}`);
             } finally {
                 aiResponseLoading.classList.add('hidden');
                 updateContent(true); // Asegurar que se muestre todo el contenido
             }
         }
 
-        // Variable para mantener el índice del patrón actual
-        let currentPatternIndex = 0;
-
         // Actualizar la función showPatternDetails para guardar el índice actual
         function showPatternDetails(index) {
+            if (!data || !data.patterns || !data.patterns[index]) {
+                showErrorNotification('No se encontró el patrón seleccionado');
+                return;
+            }
+
             currentPatternIndex = index;
             const detailsDiv = document.getElementById('patternDetails');
             const titleSpan = document.getElementById('patternTitle');
             const contentDiv = document.getElementById('patternContent');
+            const aiResponseSection = document.getElementById('aiResponseSection');
+            const aiResponseText = document.getElementById('aiResponseText');
+            
+            if (!detailsDiv || !titleSpan || !contentDiv || !aiResponseSection || !aiResponseText) {
+                console.error('Required elements not found');
+                return;
+            }
+
+            // Ensure the AI response section is hidden when showing new pattern details
+            aiResponseSection.classList.add('hidden');
+            aiResponseText.innerHTML = '';
+
             console.log(data.patterns[index]);
             titleSpan.textContent = `(${data.patterns[index].pattern_id}) ${data.patterns[index].name}`;
 
@@ -434,9 +457,7 @@ ${escapeHtml(data.patterns[index].pattern_id) || 'No especificadas'}
 
 ### Ejemplos
 ${escapeHtml(data.patterns[index].pattern_id) || 'No hay ejemplos disponibles'}
-
-
-                `;
+`;
 
             contentDiv.innerHTML = marked.parse(content);
             detailsDiv.classList.remove('hidden');
@@ -445,6 +466,11 @@ ${escapeHtml(data.patterns[index].pattern_id) || 'No hay ejemplos disponibles'}
             document.querySelectorAll('pre code').forEach((block) => {
                 hljs.highlightBlock(block);
             });
+        }
+
+        function hidePatternDetails() {
+            const detailsDiv = document.getElementById('patternDetails');
+            detailsDiv.classList.add('hidden');
         }
     </script>
 </body>

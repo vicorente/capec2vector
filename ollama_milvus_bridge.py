@@ -52,26 +52,15 @@ class OllamaPrompt(BaseModel):
     prompt: str
     pattern_id: str  # Adding pattern_id as a required field
 
-def find_available_port(start_port=8000, max_port=8999):
-    """Encuentra un puerto disponible en el rango especificado"""
-    for port in range(start_port, max_port + 1):
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.bind((HOST, port))
-                return port
-        except OSError:
-            continue
-    raise RuntimeError(f"No se encontraron puertos disponibles en el rango {start_port}-{max_port}")
-
-# Intentar usar el puerto especificado en la variable de entorno o encontrar uno disponible
+# Intentar usar siempre el puerto 8000
+# sudo lsof -i :8000 | grep LISTEN
+PORT = 8000
 try:
-    PORT = int(os.getenv("PORT", "8000"))
-    # Verificar si el puerto está disponible
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind((HOST, PORT))
-except (OSError, ValueError):
-    print(f"Puerto {PORT} no disponible, buscando uno alternativo...")
-    PORT = find_available_port()
+except OSError:
+    logger.error(f"Puerto {PORT} no disponible. Por favor, libere el puerto y vuelva a intentar.")
+    exit(1)
 
 app = FastAPI(title="CAPEC Search API")
 
@@ -378,7 +367,7 @@ async def ollama_query_stream(query_data: OllamaQuery):
                     }
                     for pattern in results
                 ]
-                yield f"data: {json.dumps({'patterns': patterns_with_details, 'stream_id': stream_id}, ensure_ascii=False)}"               
+                yield f"data: {json.dumps({'patterns': patterns_with_details, 'stream_id': stream_id}, ensure_ascii=False)}\n"               
 
             except asyncio.CancelledError:
                 logger.info(f"Stream {stream_id} cancelado por el usuario")
@@ -484,7 +473,7 @@ Según el siguiente patrón de ataque CAPEC con ID {pattern_id} y las siguientes
                 for chunk in response:
                     if chunk and "message" in chunk and "content" in chunk["message"]:
                         content = chunk["message"]["content"]
-                        yield f"data: {json.dumps({'response': content, 'pattern_id': pattern_id}, ensure_ascii=False)}"
+                        yield f"data: {json.dumps({'response': content, 'pattern_id': pattern_id}, ensure_ascii=False)}\n"
             except Exception as e:
                 logger.error(f"Error en el streaming del análisis: {str(e)}")
                 yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}"
