@@ -30,7 +30,7 @@ COLLECTION_NAME = "capec_patterns"
 DIMENSION = 768  # Dimensión del embedding de nomic
 
 def create_milvus_collection():
-    """Crea la colección en Milvus"""
+    """Crea la colección en Milvus con todos los campos del CAPEC"""
     try:
         # Conectar a Milvus
         connections.connect(host=MILVUS_HOST, port=MILVUS_PORT)
@@ -43,19 +43,49 @@ def create_milvus_collection():
         
         # Definir el esquema de la colección
         fields = [
+            # Campos básicos existentes
             FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
-            FieldSchema(name="pattern_id", dtype=DataType.VARCHAR, max_length=20),  # Ajustado según el tamaño típico de un ID
-            FieldSchema(name="name", dtype=DataType.VARCHAR, max_length=200),  # Ajustado según el tamaño máximo observado en nombres
-            FieldSchema(name="description", dtype=DataType.VARCHAR, max_length=10000),  # Ajustado para descripciones largas
-            FieldSchema(name="status", dtype=DataType.VARCHAR, max_length=20),  # Ajustado según los valores posibles de estado
-            FieldSchema(name="abstraction", dtype=DataType.VARCHAR, max_length=20),  # Ajustado según los valores posibles de abstracción
-            FieldSchema(name="Typical_Severity", dtype=DataType.VARCHAR, max_length=30),  # Ajustado según los valores posibles de severidad
-            FieldSchema(name="Likelihood_Of_Attack", dtype=DataType.VARCHAR, max_length=30),  # Ajustado según los valores posibles de probabilidad
-            FieldSchema(name="Prerequisites", dtype=DataType.VARCHAR, max_length=2000),  # Ajustado para listas largas de prerrequisitos
-            FieldSchema(name="Resources_Required", dtype=DataType.VARCHAR, max_length=2000),  # Ajustado para listas largas de recursos
-            FieldSchema(name="Mitigations", dtype=DataType.VARCHAR, max_length=2000),  # Ajustado para listas largas de mitigaciones
-            FieldSchema(name="Example_Instances", dtype=DataType.VARCHAR, max_length=5000),  # Ajustado para listas largas de ejemplos
-            FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=DIMENSION)  # Dimensión fija para embeddings
+            FieldSchema(name="pattern_id", dtype=DataType.VARCHAR, max_length=20),
+            FieldSchema(name="name", dtype=DataType.VARCHAR, max_length=200),
+            FieldSchema(name="description", dtype=DataType.VARCHAR, max_length=10000),
+            FieldSchema(name="status", dtype=DataType.VARCHAR, max_length=20),
+            FieldSchema(name="abstraction", dtype=DataType.VARCHAR, max_length=20),
+            
+            # Campos adicionales para detalles completos
+            FieldSchema(name="summary", dtype=DataType.VARCHAR, max_length=5000),
+            FieldSchema(name="alternate_terms", dtype=DataType.VARCHAR, max_length=2000),
+            FieldSchema(name="submission_date", dtype=DataType.VARCHAR, max_length=20),
+            FieldSchema(name="submission_name", dtype=DataType.VARCHAR, max_length=100),
+            FieldSchema(name="submission_organization", dtype=DataType.VARCHAR, max_length=100),
+            
+            # Campos de evaluación de riesgo
+            FieldSchema(name="typical_severity", dtype=DataType.VARCHAR, max_length=30),
+            FieldSchema(name="likelihood_of_attack", dtype=DataType.VARCHAR, max_length=30),
+            
+            # Campos técnicos
+            FieldSchema(name="prerequisites", dtype=DataType.VARCHAR, max_length=5000),
+            FieldSchema(name="skills_required", dtype=DataType.VARCHAR, max_length=5000),
+            FieldSchema(name="resources_required", dtype=DataType.VARCHAR, max_length=5000),
+            FieldSchema(name="indicators", dtype=DataType.VARCHAR, max_length=5000),
+            FieldSchema(name="consequences", dtype=DataType.VARCHAR, max_length=5000),
+            
+            # Campos de mitigación y ejemplos
+            FieldSchema(name="mitigations", dtype=DataType.VARCHAR, max_length=10000),
+            FieldSchema(name="example_instances", dtype=DataType.VARCHAR, max_length=10000),
+            FieldSchema(name="notes", dtype=DataType.VARCHAR, max_length=5000),
+            
+            # Campos de relaciones
+            FieldSchema(name="related_attack_patterns", dtype=DataType.VARCHAR, max_length=5000),
+            FieldSchema(name="related_weaknesses", dtype=DataType.VARCHAR, max_length=5000),
+            FieldSchema(name="taxonomy_mappings", dtype=DataType.VARCHAR, max_length=5000),
+            
+            # Campos de ejecución
+            FieldSchema(name="execution_flow", dtype=DataType.VARCHAR, max_length=10000),
+            FieldSchema(name="attack_steps", dtype=DataType.VARCHAR, max_length=10000),
+            FieldSchema(name="outcomes", dtype=DataType.VARCHAR, max_length=5000),
+            
+            # Vector de embedding
+            FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=DIMENSION)
         ]
         
         schema = CollectionSchema(fields=fields, description="CAPEC Attack Patterns")
@@ -79,58 +109,105 @@ def create_milvus_collection():
         raise
 
 def extract_attack_pattern(pattern, namespace):
-    """Extrae la información relevante de un patrón de ataque"""
+    """Extrae toda la información disponible de un patrón de ataque"""
     try:
-        # Obtener atributos básicos
-        pattern_id = pattern.get("ID")
-        pattern_name = pattern.get("Name")
-        pattern_status = pattern.get("Status")
-        pattern_abstraction = pattern.get("Abstraction")
+        # Función auxiliar para extraer texto de elementos
+        def get_element_text(element, xpath, join_char=", "):
+            items = element.findall(xpath, namespace)
+            if items:
+                return join_char.join(item.text.strip() for item in items if item.text)
+            return ""
 
-        # Obtener elementos de texto
-        description = pattern.find("capec:Description", namespace)
-        description_text = (
-            description.text if description is not None and description.text else ""
-        )
-        if description is not None and len(description) > 0:
-            description_text = "".join(description.itertext()).strip()
+        # Función auxiliar para extraer steps/phases
+        def extract_execution_flow(element, step_type):
+            steps = element.findall(f".//capec:{step_type}", namespace)
+            flow = []
+            for step in steps:
+                phase = step.get("Phase")
+                number = step.get("Number", "")
+                text = "".join(step.itertext()).strip()
+                flow.append(f"Phase {phase} - Step {number}: {text}")
+            return "\n".join(flow)
 
-        # Obtener severidad y probabilidad
-        likelihood = pattern.find("capec:Likelihood_Of_Attack", namespace)
-        likelihood_text = likelihood.text if likelihood is not None else "Not Specified"
-
-        severity = pattern.find("capec:Typical_Severity", namespace)
-        severity_text = severity.text if severity is not None else "Not Specified"
-
-        # Obtener elementos usando los nombres correctos del XML
-        prerequisites = pattern.find("capec:Prerequisites", namespace)
-        prerequisites_text = ", ".join([p.text for p in prerequisites]) if prerequisites is not None and len(prerequisites) > 0 else ""
-
-        resources = pattern.find("capec:Resources_Required", namespace)
-        resources_text = ", ".join([r.text for r in resources]) if resources is not None and len(resources) > 0 else ""
-
-        mitigations = pattern.find("capec:Mitigations", namespace)
-        mitigations_text = ", ".join([m.text for m in mitigations]) if mitigations is not None and len(mitigations) > 0 else ""
-
-        examples = pattern.find("capec:Example_Instances", namespace)
-        examples_text = ", ".join([e.text for e in examples]) if examples is not None and len(examples) > 0 else ""
-
-        return {
-            "pattern_id": "CAPEC-" + pattern_id,
-            "name": pattern_name,
-            "description": description_text,
-            "status": pattern_status,
-            "abstraction": pattern_abstraction,
-            "Typical_Severity": severity_text,
-            "Likelihood_Of_Attack": likelihood_text,
-            "Prerequisites": prerequisites_text,
-            "Resources_Required": resources_text,
-            "Mitigations": mitigations_text,
-            "Example_Instances": examples_text
+        # Datos básicos
+        pattern_data = {
+            "pattern_id": "CAPEC-" + pattern.get("ID", ""),
+            "name": pattern.get("Name", ""),
+            "status": pattern.get("Status", ""),
+            "abstraction": pattern.get("Abstraction", ""),
+            
+            # Descripción y resumen
+            "description": get_element_text(pattern, ".//capec:Description", "\n"),
+            "summary": get_element_text(pattern, ".//capec:Summary", "\n"),
+            "alternate_terms": get_element_text(pattern, ".//capec:Alternate_Terms//capec:Term"),
+            
+            # Metadata de sumisión
+            "submission_date": pattern.get("Submission_Date", ""),
+            "submission_name": pattern.get("Submission_Name", ""),
+            "submission_organization": pattern.get("Submission_Organization", ""),
+            
+            # Evaluación de riesgo
+            "typical_severity": get_element_text(pattern, ".//capec:Typical_Severity"),
+            "likelihood_of_attack": get_element_text(pattern, ".//capec:Likelihood_Of_Attack"),
+            
+            # Detalles técnicos
+            "prerequisites": get_element_text(pattern, ".//capec:Prerequisites//capec:Prerequisite", "\n"),
+            "skills_required": get_element_text(pattern, ".//capec:Skills_Required//capec:Skill", "\n"),
+            "resources_required": get_element_text(pattern, ".//capec:Resources_Required//capec:Resource", "\n"),
+            "indicators": get_element_text(pattern, ".//capec:Indicators//capec:Indicator", "\n"),
+            
+            # Consecuencias
+            "consequences": get_element_text(pattern, ".//capec:Consequences//capec:Consequence", "\n"),
+            
+            # Mitigación y ejemplos
+            "mitigations": get_element_text(pattern, ".//capec:Mitigations//capec:Mitigation", "\n"),
+            "example_instances": get_element_text(pattern, ".//capec:Example_Instances//capec:Example", "\n"),
+            "notes": get_element_text(pattern, ".//capec:Notes//capec:Note", "\n"),
+            
+            # Relaciones
+            "related_attack_patterns": ", ".join([
+                f"CAPEC-{ref.get('CAPEC_ID')}"
+                for ref in pattern.findall(".//capec:Related_Attack_Patterns//capec:Related_Attack_Pattern", namespace)
+            ]),
+            
+            "related_weaknesses": ", ".join([
+                f"CWE-{ref.get('CWE_ID')}"
+                for ref in pattern.findall(".//capec:Related_Weaknesses//capec:Related_Weakness", namespace)
+            ]),
+            
+            # Mapeos de taxonomía
+            "taxonomy_mappings": ", ".join([
+                f"{mapping.get('Taxonomy_Name')}-{mapping.get('Entry_ID')}"
+                for mapping in pattern.findall(".//capec:Taxonomy_Mappings//capec:Taxonomy_Mapping", namespace)
+            ]),
+            
+            # Flujo de ejecución
+            "execution_flow": extract_execution_flow(pattern, "Attack_Step"),
+            "attack_steps": extract_execution_flow(pattern, "Technique"),
+            "outcomes": get_element_text(pattern, ".//capec:Outcomes//capec:Outcome", "\n")
         }
-    except AttributeError as e:
-        logger.error(f"Error procesando patrón: {e}")
+
+        return pattern_data
+
+    except Exception as e:
+        logger.error(f"Error procesando patrón {pattern.get('ID')}: {e}")
         return None
+
+def create_pattern_embedding_text(pattern):
+    """Crea un texto enriquecido para generar el embedding"""
+    sections = [
+        f"CAPEC-{pattern['pattern_id']}",
+        f"Name: {pattern['name']}",
+        f"Description: {pattern['description']}",
+        f"Summary: {pattern['summary']}",
+        f"Prerequisites: {pattern['prerequisites']}",
+        f"Attack Steps: {pattern['attack_steps']}",
+        f"Consequences: {pattern['consequences']}",
+        f"Mitigations: {pattern['mitigations']}",
+        f"Related Weaknesses: {pattern['related_weaknesses']}",
+        f"Related Patterns: {pattern['related_attack_patterns']}"
+    ]
+    return " | ".join(filter(None, sections))
 
 def main():
     try:
@@ -152,6 +229,10 @@ def main():
             {"capec": root.tag.split("}")[0].strip("{")} if "}" in root.tag else ""
         )
         logger.info("Procesando archivo XML...")
+        
+        logger.info("Iniciando procesamiento del catálogo CAPEC...")
+        logger.info(f"Versión del catálogo: {root.get('Version')}")
+        logger.info(f"Fecha del catálogo: {root.get('Date')}")
 
         # Obtener el contenedor Attack_Patterns
         attack_patterns_container = root.find("capec:Attack_Patterns", namespace)
@@ -168,16 +249,22 @@ def main():
                 attack_patterns.append(pattern_data)
 
         logger.info(f"Se encontraron {len(attack_patterns)} patrones de ataque")
+        
+        logger.info(f"Procesados {len(attack_patterns)} patrones de ataque")
+        logger.info("Desglose por abstracción:")
+        abstractions = {}
+        for pattern in attack_patterns:
+            abs_level = pattern['abstraction'] or 'Unspecified'
+            abstractions[abs_level] = abstractions.get(abs_level, 0) + 1
+        for abs_level, count in abstractions.items():
+            logger.info(f"  - {abs_level}: {count} patrones")
 
         # Generar embeddings
         logger.info("Generando embeddings...")
         model = SentenceTransformer("nomic-ai/nomic-embed-text-v1", trust_remote_code=True)
 
         # Crear textos combinados para embedding
-        texts = [
-            f"{pattern['pattern_id']} {pattern['name']}: {pattern['description']}"
-            for pattern in attack_patterns
-        ]
+        texts = [create_pattern_embedding_text(pattern) for pattern in attack_patterns]
 
         # Generar embeddings
         embeddings = model.encode(texts, convert_to_tensor=False)
