@@ -29,11 +29,11 @@
 /* Estilos para el contenido markdown */
 .prose.markdown-content {
     color: #374151;
-    line-height: 1.4;
+    line-height: 1;
 }
 
 .prose.markdown-content h1 {
-    font-size: 2.25rem;
+    font-size: 2rem;
     font-weight: 700;
     color: #1F2937;
     margin-bottom: 0rem;
@@ -41,7 +41,7 @@
 }
 
 .prose.markdown-content h2 {
-    font-size: 1.875rem;
+    font-size: 1.5rem;
     font-weight: 600;
     color: #374151;
     margin-bottom: 0rem;
@@ -49,7 +49,7 @@
 }
 
 .prose.markdown-content h3 {
-    font-size: 1.5rem;
+    font-size: 1.3rem;
     font-weight: 500;
     color: #4B5563;
     margin-bottom: 0rem;
@@ -76,28 +76,21 @@
 .prose.markdown-content ol {
     list-style-type: decimal;
     margin-left: 1.5rem;
-    margin-bottom: 0.5rem;  /* Reducido de 1rem */
-    margin-top: 0.5rem;     /* Reducido de 1rem */
+    margin-bottom: 0rem;  /* Reducido de 1rem */
+    margin-top: 0rem;     /* Reducido de 1rem */
     padding-top: 0;         /* Asegura que no haya padding adicional */
     padding-bottom: 0;      /* Asegura que no haya padding adicional */
+    line-height: 1.2;
 }
 
 /* También ajusta el espacio entre elementos de la lista */
 .prose.markdown-content li {
     color: #374151;
     margin-bottom: 0rem; /* Espacio reducido entre elementos */
-    margin-top: 0;
+    margin-top: 0rem;
     padding-top: 0;
     padding-bottom: 0;
-}
-
-/* Para reducir el espacio cuando hay elementos p antes o después de las listas */
-.prose.markdown-content p + ul,
-.prose.markdown-content p + ol,
-.prose.markdown-content ul + p,
-.prose.markdown-content ol + p {
-    margin-top: 0rem;
-    margin-bottom: 0rem;
+    line-height: 1.2;
 }
 
 .prose.markdown-content code {
@@ -106,6 +99,7 @@
     background-color: #F3F4F6;
     padding: 0.2rem 0.4rem;
     border-radius: 0.25rem;
+    line-height: 1.4;
 }
 
 .prose.markdown-content pre {
@@ -114,6 +108,7 @@
     padding: 0.5rem;
     overflow-x: auto;
     margin: 0.5rem 0;
+    line-height: 1.4;
 }
 
 .prose.markdown-content pre code {
@@ -121,6 +116,7 @@
     padding: 0;
     color: #E5E7EB;
     font-size: 0.875rem;
+    line-height: 1.4;
 }
 
 /* Estilos para el resaltado de código */

@@ -85,6 +85,7 @@ class SearchQuery(BaseModel):
 
 class OllamaQuery(BaseModel):
     query: str
+    top_k: int = 10
 
 # Almacenamiento para los controladores de streaming activos
 active_streams: Dict[str, asyncio.Task] = {}
@@ -113,7 +114,7 @@ def connect_to_milvus():
         logger.error(f"Error al conectar con Milvus: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error al conectar con Milvus: {str(e)}")
 
-def search_patterns(query_text: str, top_k: int = 5):
+def search_patterns(query_text: str, top_k: int):
     """Realiza búsqueda semántica en Milvus"""
     try:
         logger.info(f"Iniciando búsqueda de patrones para: '{query_text}'")
@@ -286,7 +287,7 @@ async def ollama_query(query_data: OllamaQuery):
         
         # Primero, buscar patrones relevantes
         logger.info("Iniciando búsqueda de patrones en Milvus")
-        results = search_patterns(query_data.query, top_k=10)
+        results = search_patterns(query_data.query, query_data.top_k)
         
         # Crear prompt para Ollama
         logger.info("Preparando prompt para Ollama")
