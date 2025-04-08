@@ -133,6 +133,7 @@
 .hljs-title,
 .hljs-section,
 .hljs-doctag,
+
 .hljs-template-tag,
 .hljs-deletion {
     color: #F87171;
@@ -157,6 +158,10 @@
 
 .hljs-literal {
     color: #60A5FA;
+}
+
+.hljs-subst {
+    color: #df2066;
 }
 
 .hljs-variable,

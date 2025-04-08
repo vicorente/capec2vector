@@ -149,13 +149,7 @@ def search_patterns(query_text: str, top_k: int):
                 "pattern_id",
                 "name",
                 "description",
-                "status",
-                "Typical_Severity",
-                "Likelihood_Of_Attack",
-                "Prerequisites",
-                "Resources_Required",
-                "Mitigations",
-                "Example_Instances",
+                "status"                
             ],
         )
 
@@ -169,14 +163,10 @@ def search_patterns(query_text: str, top_k: int):
                     "pattern_id": hit.entity.get("pattern_id"),
                     "name": hit.entity.get("name"),
                     "description": hit.entity.get("description"),
-                    "similarity_score": float(1 - hit.score),  # Convertir a float para serialización
-                    "status": hit.entity.get("status"),
-                    "typical_severity": hit.entity.get("Typical_Severity"),
-                    "likelihood": hit.entity.get("Likelihood_Of_Attack"),
-                    "prerequisites": hit.entity.get("Prerequisites"),
-                    "resources_required": hit.entity.get("Resources_Required"),
-                    "mitigations": hit.entity.get("Mitigations"),
-                    "examples": hit.entity.get("Example_Instances"),
+                    "similarity_score": float(
+                        1 - hit.score
+                    ),  # Convertir a float para serialización
+                    "status": hit.entity.get("status")                  
                 }
 
                 # Validar el estado del patrón
@@ -339,7 +329,7 @@ async def ollama_query(query_data: OllamaQuery):
 async def stop_generation(stream_id: str):
     """Endpoint para detener la generación de un stream específico"""
     try:
-        if stream_id in active_streams:
+        if (stream_id in active_streams):
             # Cancelar la tarea de streaming
             active_streams[stream_id].cancel()
             del active_streams[stream_id]
@@ -355,7 +345,7 @@ async def ollama_query_stream(query_data: OllamaQuery):
         logger.info(f"Recibida nueva consulta streaming: '{query_data.query}'")
         stream_id = f"stream_{datetime.now().timestamp()}"
         logger.info("Iniciando búsqueda de patrones en Milvus")
-        results = search_patterns(query_data.query, top_k=10)
+        results = search_patterns(query_data.query, query_data.top_k)
 
         async def generate():
             try:
@@ -417,12 +407,28 @@ async def analyze_pattern(prompt_data: OllamaPrompt):
                     "name",
                     "description",
                     "status",
-                    "Typical_Severity",
-                    "Likelihood_Of_Attack",
-                    "Prerequisites",
-                    "Resources_Required",
-                    "Mitigations",
-                    "Example_Instances",
+                    "abstraction",
+                    "summary",
+                    "alternate_terms",
+                    "submission_date",
+                    "submission_name",
+                    "submission_organization",
+                    "typical_severity",
+                    "likelihood_of_attack",
+                    "prerequisites",
+                    "skills_required",
+                    "resources_required",
+                    "indicators",
+                    "consequences",
+                    "mitigations",
+                    "example_instances",
+                    "notes",
+                    "related_attack_patterns",
+                    "related_weaknesses",
+                    "taxonomy_mappings",
+                    "execution_flow",
+                    "attack_steps",
+                    "outcomes"
                 ]
             )
             connections.disconnect("default")
@@ -431,19 +437,54 @@ async def analyze_pattern(prompt_data: OllamaPrompt):
                 raise HTTPException(status_code=404, detail=f"Patrón {pattern_id} no encontrado")
 
             pattern = pattern_details[0]
-            # Crear un contexto enriquecido con los detalles del patrón
+            
+            # Crear un contexto enriquecido con todos los detalles del patrón
             enriched_prompt = f"""
-Según el siguiente patrón de ataque CAPEC con ID {pattern_id} y las siguientes características:
+Analiza el siguiente patrón de ataque CAPEC {pattern_id} con todos sus detalles:
 
-- Name: {pattern.get('name')}
-- Description: {pattern.get('description')}
-- Status: {pattern.get('status')}
-- Severity: {pattern.get('Typical_Severity')}
-- Likelihood of Attack: {pattern.get('Likelihood_Of_Attack')}
-- Prerequisites: {pattern.get('Prerequisites')}
-- Resources Required: {pattern.get('Resources_Required')}
-- Mitigations: {pattern.get('Mitigations')}
-- Examples: {pattern.get('Example_Instances')}
+INFORMACIÓN BÁSICA:
+- ID: {pattern.get('pattern_id')}
+- Nombre: {pattern.get('name')}
+- Estado: {pattern.get('status')}
+- Nivel de Abstracción: {pattern.get('abstraction')}
+
+DESCRIPCIÓN Y RESUMEN:
+- Descripción: {pattern.get('description')}
+- Resumen: {pattern.get('summary')}
+- Términos Alternativos: {pattern.get('alternate_terms')}
+
+METADATA:
+- Fecha de Envío: {pattern.get('submission_date')}
+- Autor: {pattern.get('submission_name')}
+- Organización: {pattern.get('submission_organization')}
+
+EVALUACIÓN DE RIESGO:
+- Severidad Típica: {pattern.get('typical_severity')}
+- Probabilidad de Ataque: {pattern.get('likelihood_of_attack')}
+
+REQUISITOS TÉCNICOS:
+- Prerrequisitos: {pattern.get('prerequisites')}
+- Habilidades Requeridas: {pattern.get('skills_required')}
+- Recursos Necesarios: {pattern.get('resources_required')}
+- Indicadores: {pattern.get('indicators')}
+
+IMPACTO Y MITIGACIÓN:
+- Consecuencias: {pattern.get('consequences')}
+- Mitigaciones: {pattern.get('mitigations')}
+
+EJEMPLOS Y NOTAS:
+- Instancias de Ejemplo: {pattern.get('example_instances')}
+- Notas Adicionales: {pattern.get('notes')}
+
+RELACIONES:
+- Patrones de Ataque Relacionados: {pattern.get('related_attack_patterns')}
+- Debilidades Relacionadas: {pattern.get('related_weaknesses')}
+- Mapeos de Taxonomía: {pattern.get('taxonomy_mappings')}
+
+FLUJO DE EJECUCIÓN:
+- Pasos de Ejecución: {pattern.get('execution_flow')}
+- Pasos del Ataque: {pattern.get('attack_steps')}
+- Resultados: {pattern.get('outcomes')}
 
 {prompt}
 """

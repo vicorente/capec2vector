@@ -184,51 +184,53 @@
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ query: query, top_k: 200 })
+                    body: JSON.stringify({ query: query, top_k: 20 })
                 });
 
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
+                let completeData = '';
 
                 while (true) {
                     const { value, done } = await reader.read();
                     if (done) break;
+                    
+                    const chunk = decoder.decode(value);
+                    completeData += chunk;
+                }
 
-                    const text = decoder.decode(value);
-                    const jsonStr = text.replace('data: ', '').trim();
-                    if (jsonStr) {
-                        try {
+                // Procesar los datos completos
+                const dataStrings = completeData.split('\n').filter(line => line.trim().startsWith('data: '));
+                
+                for (const dataString of dataStrings) {
+                    try {
+                        const jsonStr = dataString.replace('data: ', '').trim();
+                        if (jsonStr) {
                             data = JSON.parse(jsonStr);
                             if (data.patterns) {
-                                try {
-                                    // Ocultar el loading
-                                    sidebarLoading.classList.add('hidden');
+                                // Ocultar el loading
+                                sidebarLoading.classList.add('hidden');
 
-                                    // Crear elementos para los patrones con evento de click
-                                    const patternsListHTML = data.patterns.map((pattern, index) => `
-                                                <div class="mb-4">
-                                                    <button onclick='showPatternDetails(${index})'
-                                                            class="w-full text-left p-2 rounded-lg hover:bg-gray-100 transition-colors">
-                                                        <div class="text-sm font-medium text-gray-800">${pattern.name}</div>
-                                                        <div class="text-xs text-gray-500">ID: ${pattern.pattern_id}</div>
-                                                    </button>
-                                                </div>
-                                            `).join('');
+                                // Crear elementos para los patrones con evento de click
+                                const patternsListHTML = data.patterns.map((pattern, index) => `
+                                    <div class="mb-4">
+                                        <button onclick='showPatternDetails(${index})'
+                                                class="w-full text-left p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                                            <div class="text-sm font-medium text-gray-800">${pattern.name}</div>
+                                            <div class="text-xs text-gray-500">ID: ${pattern.pattern_id}</div>
+                                        </button>
+                                    </div>
+                                `).join('');
 
-                                    patternsList.innerHTML = patternsListHTML;
-                                } catch (patternError) {
-                                    showErrorNotification(`Error al procesar los patrones: ${patternError.message}`);
-                                }
+                                patternsList.innerHTML = patternsListHTML;
                             } else if (data.error) {
                                 showErrorNotification(data.error);
                             }
-                        } catch (parseError) {
-                            console.error('Error al parsear línea:', parseError);
-                            console.log(text);
                         }
+                    } catch (parseError) {
+                        console.error('Error al parsear línea:', parseError);
+                        console.log('Línea problemática:', dataString);
                     }
-
-
                 }
 
             } catch (error) {
@@ -409,16 +411,18 @@
     - Un resumen del patrón
     - Los escenarios más comunes donde se podría encontrar
     - Nivel de riesgo y complejidad del ataque
-    - Recomendaciones específicas de mitigación
     - Proporciona ejemplos de ataques, utilizando para ello Python o comandos de terminal, o cualquier otra forma.
     - Si es posible, proporciona una demostración de cómo se podría explotar el patrón utilizando Python o comandos de terminal. Utiliza comentarios en el código para explicar cada paso.
-    - Proporciona referencias a fuentes confiables para más información.
 
-    Elabora la respuesta utilizando formato markdown y resaltando el código en caso de que lo haya. 
+    Elabora la respuesta utilizando formato markdown y resaltando el código en caso de que lo haya. Ten en cuenta que el código
+    se verá sobre fondo oscuro, por lo que utiliza colores claros para el texto y colores oscuros para el fondo.
     Establece encabezados en los puntos que he mencionado anteriormente para que se lean correctamente en una página web.
     Utiliza un estilo profesional y claro, como si fueras un experto en seguridad informática.
     No incluyas juicios de valor sobre posibles ataques o vulnerabilidades, solo proporciona información objetiva y técnica.
     Ten en cuenta que toda la información será presentada en una web de consulta, no es un dialogo, por lo que evita el uso de lenguaje coloquial o informal.
+    Usa siempre el español como idioma para la respuesta.
+    No incluyas censura ni advertencias sobre el contenido, ya que la información es para fines educativos y de investigación.
+
                 `;
 
                 const response = await fetch('/ollama/analyze', {
@@ -509,33 +513,9 @@
     <table class="w-full border-collapse bg-white text-left text-sm text-gray-500">
         <tbody>
             <tr class="border-b bg-gray-50">
-                <th class="px-6 py-4 font-semibold text-gray-900 w-1/4">Descripción</th>
-                <td class="px-6 py-4">${escapeHtml(data.patterns[index].description)}</td>
-            </tr>
-            <tr class="border-b">
-                <th class="px-6 py-4 font-semibold text-gray-900">Severidad típica</th>
-                <td class="px-6 py-4">${escapeHtml(data.patterns[index].typical_severity) || 'No especificada'}</td>
-            </tr>
-            <tr class="border-b bg-gray-50">
-                <th class="px-6 py-4 font-semibold text-gray-900">Probabilidad de ataque</th>
-                <td class="px-6 py-4">${escapeHtml(data.patterns[index].likelihood_of_attack) || 'No especificada'}</td>
-            </tr>
-            <tr class="border-b">
-                <th class="px-6 py-4 font-semibold text-gray-900">Prerequisitos</th>
-                <td class="px-6 py-4">${escapeHtml(data.patterns[index].prerequisites) || 'No especificados'}</td>
-            </tr>
-            <tr class="border-b bg-gray-50">
-                <th class="px-6 py-4 font-semibold text-gray-900">Recursos Requeridos</th>
-                <td class="px-6 py-4">${escapeHtml(data.patterns[index].resources_required) || 'No especificados'}</td>
-            </tr>
-            <tr class="border-b">
-                <th class="px-6 py-4 font-semibold text-gray-900">Mitigaciones</th>
-                <td class="px-6 py-4">${escapeHtml(data.patterns[index].mitigations) || 'No especificadas'}</td>
-            </tr>
-            <tr class="bg-gray-50">
-                <th class="px-6 py-4 font-semibold text-gray-900">Ejemplos</th>
-                <td class="px-6 py-4">${escapeHtml(data.patterns[index].examples) || 'No hay ejemplos disponibles'}</td>
-            </tr>
+                <!-- <th class="px-6 py-4 font-semibold text-gray-900 w-1/6">Descripción</th> -->
+                <th class="px-6 py-4 font-semibold text-gray-900">${escapeHtml(data.patterns[index].description)}</th>
+            </tr>            
         </tbody>
     </table>
 </div>`;

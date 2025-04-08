@@ -111,11 +111,29 @@ def create_milvus_collection():
 def extract_attack_pattern(pattern, namespace):
     """Extrae toda la información disponible de un patrón de ataque"""
     try:
-        # Función auxiliar para extraer texto de elementos
+        # Función auxiliar para extraer texto directo de elementos
+        def get_direct_text(element):
+            """Obtiene solo el texto directo de un elemento, sin incluir el texto de sus hijos"""
+            text = ""
+            if element is not None:
+                # Obtener solo el texto directo del elemento
+                if element.text:
+                    text += element.text.strip()
+                # No incluir el texto de los elementos hijos
+                for child in element:
+                    if child.tail:
+                        text += child.tail.strip()
+            return text
+
         def get_element_text(element, xpath, join_char=", "):
+            """Extrae texto de elementos considerando solo el texto directo"""
             items = element.findall(xpath, namespace)
             if items:
-                return join_char.join(item.text.strip() for item in items if item.text)
+                return join_char.join(
+                    get_direct_text(item)
+                    for item in items 
+                    if get_direct_text(item)
+                )
             return ""
 
         # Función auxiliar para extraer steps/phases
@@ -125,19 +143,23 @@ def extract_attack_pattern(pattern, namespace):
             for step in steps:
                 phase = step.get("Phase")
                 number = step.get("Number", "")
-                text = "".join(step.itertext()).strip()
+                text = get_direct_text(step)
                 flow.append(f"Phase {phase} - Step {number}: {text}")
             return "\n".join(flow)
 
-        # Datos básicos
+        # Extraer descripción de forma limpia
+        description_elem = pattern.find(".//capec:Description", namespace)
+        description = get_direct_text(description_elem) if description_elem is not None else ""
+
+        # Datos básicos con la descripción limpia
         pattern_data = {
             "pattern_id": "CAPEC-" + pattern.get("ID", ""),
             "name": pattern.get("Name", ""),
             "status": pattern.get("Status", ""),
             "abstraction": pattern.get("Abstraction", ""),
+            "description": description,  # Usar la descripción limpia
             
             # Descripción y resumen
-            "description": get_element_text(pattern, ".//capec:Description", "\n"),
             "summary": get_element_text(pattern, ".//capec:Summary", "\n"),
             "alternate_terms": get_element_text(pattern, ".//capec:Alternate_Terms//capec:Term"),
             
@@ -194,20 +216,130 @@ def extract_attack_pattern(pattern, namespace):
         return None
 
 def create_pattern_embedding_text(pattern):
-    """Crea un texto enriquecido para generar el embedding"""
-    sections = [
-        f"CAPEC-{pattern['pattern_id']}",
-        f"Name: {pattern['name']}",
-        f"Description: {pattern['description']}",
-        f"Summary: {pattern['summary']}",
-        f"Prerequisites: {pattern['prerequisites']}",
-        f"Attack Steps: {pattern['attack_steps']}",
-        f"Consequences: {pattern['consequences']}",
-        f"Mitigations: {pattern['mitigations']}",
-        f"Related Weaknesses: {pattern['related_weaknesses']}",
-        f"Related Patterns: {pattern['related_attack_patterns']}"
+    """Crea un texto enriquecido para generar el embedding incluyendo todos los campos del patrón"""
+    # Primero verificamos que el patrón tenga todas las claves necesarias
+    required_fields = [
+        'pattern_id', 'name', 'status', 'abstraction', 'description', 
+        'summary', 'alternate_terms', 'submission_date', 'submission_name',
+        'submission_organization', 'typical_severity', 'likelihood_of_attack',
+        'prerequisites', 'skills_required', 'resources_required', 'indicators',
+        'consequences', 'mitigations', 'example_instances', 'notes',
+        'related_attack_patterns', 'related_weaknesses', 'taxonomy_mappings',
+        'execution_flow', 'attack_steps', 'outcomes'
     ]
-    return " | ".join(filter(None, sections))
+    
+    # Asegurarnos de que todos los campos existan, si no, usar valor vacío
+    safe_pattern = {field: pattern.get(field, '') for field in required_fields}
+    
+    sections = [
+        # Información básica
+        f"CAPEC-{safe_pattern['pattern_id']}",
+        f"Name: {safe_pattern['name']}",
+        f"Status: {safe_pattern['status']}",
+        f"Abstraction: {safe_pattern['abstraction']}",
+        
+        # Descripción y resumen
+        f"Description: {safe_pattern['description']}",
+        f"Summary: {safe_pattern['summary']}",
+        f"Alternate Terms: {safe_pattern['alternate_terms']}",
+        
+        # Metadata de sumisión
+        f"Submission Date: {safe_pattern['submission_date']}",
+        f"Submission Name: {safe_pattern['submission_name']}",
+        f"Submission Organization: {safe_pattern['submission_organization']}",
+        
+        # Evaluación de riesgo
+        f"Typical Severity: {safe_pattern['typical_severity']}",
+        f"Likelihood of Attack: {safe_pattern['likelihood_of_attack']}",
+        
+        # Detalles técnicos
+        f"Prerequisites: {safe_pattern['prerequisites']}",
+        f"Skills Required: {safe_pattern['skills_required']}",
+        f"Resources Required: {safe_pattern['resources_required']}",
+        f"Indicators: {safe_pattern['indicators']}",
+        
+        # Consecuencias y mitigación
+        f"Consequences: {safe_pattern['consequences']}",
+        f"Mitigations: {safe_pattern['mitigations']}",
+        
+        # Ejemplos y notas
+        f"Example Instances: {safe_pattern['example_instances']}",
+        f"Notes: {safe_pattern['notes']}",
+        
+        # Relaciones
+        f"Related Attack Patterns: {safe_pattern['related_attack_patterns']}",
+        f"Related Weaknesses: {safe_pattern['related_weaknesses']}",
+        f"Taxonomy Mappings: {safe_pattern['taxonomy_mappings']}",
+        
+        # Flujo de ejecución
+        f"Execution Flow: {safe_pattern['execution_flow']}",
+        f"Attack Steps: {safe_pattern['attack_steps']}",
+        f"Outcomes: {safe_pattern['outcomes']}"
+    ]
+    
+    # Filtrar secciones vacías y unir con separador
+    filtered_sections = []
+    for section in sections:
+        parts = section.split(': ', 1)  # Dividir solo en la primera aparición de ': '
+        if len(parts) > 1 and parts[1].strip():
+            filtered_sections.append(section)
+    
+    return " | ".join(filtered_sections) if filtered_sections else "No data available"
+
+def clean_and_validate_data(pattern_data):
+    """Limpia y valida los datos antes de la inserción en Milvus"""
+    try:
+        # Función auxiliar para truncar texto
+        def truncate_text(text, max_length):
+            return str(text)[:max_length] if text else ""
+
+        # Definir límites máximos según el esquema
+        max_lengths = {
+            "pattern_id": 20,
+            "name": 200,
+            "description": 10000,
+            "status": 20,
+            "abstraction": 20,
+            "summary": 5000,
+            "alternate_terms": 2000,
+            "submission_date": 20,
+            "submission_name": 100,
+            "submission_organization": 100,
+            "typical_severity": 30,
+            "likelihood_of_attack": 30,
+            "prerequisites": 5000,
+            "skills_required": 5000,
+            "resources_required": 5000,
+            "indicators": 5000,
+            "consequences": 5000,
+            "mitigations": 10000,
+            "example_instances": 10000,
+            "notes": 5000,
+            "related_attack_patterns": 5000,
+            "related_weaknesses": 5000,
+            "taxonomy_mappings": 5000,
+            "execution_flow": 10000,
+            "attack_steps": 10000,
+            "outcomes": 5000
+        }
+
+        # Limpiar y validar cada campo
+        clean_data = {}
+        for field, value in pattern_data.items():
+            if field == "embedding":
+                clean_data[field] = value
+                continue
+                
+            max_length = max_lengths.get(field)
+            if max_length:
+                clean_data[field] = truncate_text(value, max_length)
+            else:
+                clean_data[field] = str(value) if value else ""
+
+        return clean_data
+    except Exception as e:
+        logger.error(f"Error en la limpieza y validación de datos: {e}")
+        return None
 
 def main():
     try:
@@ -236,7 +368,7 @@ def main():
 
         # Obtener el contenedor Attack_Patterns
         attack_patterns_container = root.find("capec:Attack_Patterns", namespace)
-        if attack_patterns_container is None:
+        if (attack_patterns_container is None):
             logger.error("Error: No se encontró la estructura Attack_Patterns en el XML")
             return
 
@@ -245,44 +377,64 @@ def main():
             "capec:Attack_Pattern", namespace
         ):
             pattern_data = extract_attack_pattern(pattern, namespace)
-            if pattern_data:
+            if (pattern_data):
                 attack_patterns.append(pattern_data)
 
-        logger.info(f"Se encontraron {len(attack_patterns)} patrones de ataque")
+        logger.info(f"Se encontraron {len(attack_patterns)} patrones de ataque")        
         
-        logger.info(f"Procesados {len(attack_patterns)} patrones de ataque")
-        logger.info("Desglose por abstracción:")
-        abstractions = {}
-        for pattern in attack_patterns:
-            abs_level = pattern['abstraction'] or 'Unspecified'
-            abstractions[abs_level] = abstractions.get(abs_level, 0) + 1
-        for abs_level, count in abstractions.items():
-            logger.info(f"  - {abs_level}: {count} patrones")
 
         # Generar embeddings
         logger.info("Generando embeddings...")
         model = SentenceTransformer("nomic-ai/nomic-embed-text-v1", trust_remote_code=True)
 
-        # Crear textos combinados para embedding
-        texts = [create_pattern_embedding_text(pattern) for pattern in attack_patterns]
-
+        # Crear textos combinados para embedding y filtrar patrones vacíos
+        valid_patterns = []
+        valid_texts = []
+        
+        for pattern in attack_patterns:
+            text = create_pattern_embedding_text(pattern)
+            if text != "No data available":
+                valid_patterns.append(pattern)
+                valid_texts.append(text)
+        
+        if not valid_texts:
+            logger.error("No se encontraron patrones válidos para generar embeddings")
+            return
+            
         # Generar embeddings
-        embeddings = model.encode(texts, convert_to_tensor=False)
+        logger.info(f"Generando embeddings para {len(valid_texts)} patrones válidos...")
+        embeddings = model.encode(valid_texts, convert_to_tensor=False)
         logger.info(f"Se generaron {len(embeddings)} embeddings")
 
         # Preparar datos para insertar en Milvus
         collection.load()
 
         entities = []
-        for i, pattern in enumerate(attack_patterns):
+        batch_size = 1000  # Procesar en lotes para mejor manejo de memoria
+        current_batch = []
+
+        for i, pattern in enumerate(valid_patterns):
             entity = pattern.copy()
             entity["embedding"] = embeddings[i].tolist()
-            entities.append(entity)
+            
+            # Limpiar y validar los datos
+            clean_entity = clean_and_validate_data(entity)
+            if clean_entity:
+                current_batch.append(clean_entity)
+            
+            # Insertar cuando el lote esté completo o sea el último elemento
+            if len(current_batch) >= batch_size or i == len(valid_patterns) - 1:
+                try:
+                    mr = collection.insert(current_batch)
+                    logger.info(f"Insertados {len(current_batch)} registros. IDs: {mr.primary_keys}")
+                    current_batch = []
+                except Exception as e:
+                    logger.error(f"Error al insertar lote en Milvus: {e}")
+                    continue
 
-        # Insertar datos en Milvus
-        logger.info("Insertando datos en Milvus...")
-        collection.insert(entities)
-        logger.info("Datos insertados exitosamente en Milvus")
+        # Asegurar que los datos estén persistidos
+        collection.flush()
+        logger.info(f"Total de patrones insertados exitosamente en Milvus: {collection.num_entities}")
 
     except ET.ParseError as e:
         logger.error(f"Error al parsear el XML: {e}")
@@ -290,6 +442,7 @@ def main():
         logger.error(f"Error inesperado: {e}")
     finally:
         # Cerrar conexión con Milvus
+        collection.release()
         connections.disconnect("default")
         logger.info("Desconectado de Milvus")
 
