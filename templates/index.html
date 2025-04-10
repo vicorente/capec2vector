@@ -179,7 +179,7 @@
             patternsList.innerHTML = '';
 
             try {
-                const response = await fetch('/ollama/query/stream', {
+                const response = await fetch('/patterns/query/stream', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

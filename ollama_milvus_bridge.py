@@ -339,8 +339,9 @@ async def stop_generation(stream_id: str):
         logger.error(f"Error al detener la generación: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/ollama/query/stream")
-async def ollama_query_stream(query_data: OllamaQuery):
+
+@app.post("/patterns/query/stream")
+async def patterns_query_stream(query_data: SearchQuery):
     try:
         logger.info(f"Recibida nueva consulta streaming: '{query_data.query}'")
         stream_id = f"stream_{datetime.now().timestamp()}"
@@ -385,6 +386,7 @@ async def ollama_query_stream(query_data: OllamaQuery):
     except Exception as e:
         logger.error(f"Error en el endpoint /ollama/query/stream: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/ollama/analyze")
 async def analyze_pattern(prompt_data: OllamaPrompt):
@@ -514,7 +516,7 @@ FLUJO DE EJECUCIÓN:
             try:
                 for chunk in response:
                     if chunk and "message" in chunk and "content" in chunk["message"]:
-                        content = chunk["message"]["content"]
+                        content = chunk["message"]["content"]                        
                         yield f"data: {json.dumps({'response': content, 'pattern_id': pattern_id}, ensure_ascii=False)}\n"
             except Exception as e:
                 logger.error(f"Error en el streaming del análisis: {str(e)}")
