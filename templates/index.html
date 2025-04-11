@@ -99,7 +99,8 @@
                                     <div class="flex-1">
                                         <input type="text" id="targetInput" 
                                             class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
-                                            placeholder="Introduce el objetivo (dominio, URL o IP)">
+                                            placeholder="example.com"
+                                            value="example.com">
                                     </div>
                                     <button onclick="generateAttackPlan()" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500">
                                         <i class="fas fa-bug mr-2"></i>
@@ -110,7 +111,7 @@
                                     <i class="fas fa-spinner fa-spin text-2xl text-red-600"></i>
                                     <p class="text-sm text-gray-600 mt-2">Generando plan de ataque...</p>
                                 </div>
-                                <div id="attackPlanContent" class="prose prose-sm sm:prose lg:prose-lg max-w-none markdown-content"></div>
+                                <div id="attackPlanContent" class="prose prose-sm sm:prose lg:prose-lg max-w-none markdown-content whitespace-pre-wrap break-words"></div>
                             </div>
                         </div>
                     </div>
@@ -179,6 +180,93 @@
         let isUserScrolling = false;
         let lastScrollPosition = 0;
         let scrollTimeout = null;
+        var lastUpdateTime = 0; // Variable para controlar la última actualización del contenido
+        const UPDATE_INTERVAL = 50; // Intervalo de actualización en milisegundos
+        // Función compartida para actualizar contenido markdown con formato
+        function updateContent(content, containerElement, force = false) {
+            const now = Date.now();
+            if (force || now - lastUpdateTime >= UPDATE_INTERVAL) {
+                if (content.trim()) {
+                    try {
+                        const processedText = content.replace(/\n\s*\n/g, '\n');
+                        const formattedContent = marked.parse(processedText);
+                        containerElement.innerHTML = formattedContent;
+                        
+                        // Resaltar código si existe
+                        containerElement.querySelectorAll('pre code').forEach((block) => {
+                            try {
+                                hljs.highlightBlock(block);
+                            } catch (e) {
+                                console.error('Error highlighting code:', e);
+                            }
+                        });
+                        
+                        // Aplicar estilos de markdown
+                        containerElement.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach(header => {
+                            header.classList.add('prose', 'markdown-content');
+                        });
+                        
+                        // Add markdown styling to paragraphs and lists
+                        containerElement.querySelectorAll('p, ul, ol, li, code, pre').forEach(element => {
+                            element.classList.add('prose', 'markdown-content');
+                        });
+                        
+                        // Add specific styling for code blocks
+                        containerElement.querySelectorAll('pre code').forEach(block => {
+                            const pre = block.parentElement;
+                            pre.classList.add('prose', 'markdown-content');
+                            block.classList.add('hljs');
+
+                            // Create code block header if it doesn't exist
+                            if (!pre.previousElementSibling?.classList.contains('code-block-header')) {
+                                const header = document.createElement('div');
+                                header.className = 'code-block-header';
+
+                                const language = block.className.match(/language-(\w+)/)?.[1] || 'texto';
+                                const languageSpan = document.createElement('span');
+                                languageSpan.textContent = language.charAt(0).toUpperCase() + language.slice(1);
+                                header.appendChild(languageSpan);
+
+                                const copyButton = document.createElement('button');
+                                copyButton.className = 'copy-button';
+                                copyButton.innerHTML = '<i class="fas fa-copy"></i> Copiar';
+                                copyButton.onclick = async () => {
+                                    try {
+                                        await navigator.clipboard.writeText(block.textContent);
+                                        copyButton.innerHTML = '<i class="fas fa-check"></i> Copiado';
+                                        setTimeout(() => {
+                                            copyButton.innerHTML = '<i class="fas fa-copy"></i> Copiar';
+                                        }, 2000);
+                                    } catch (err) {
+                                        console.error('Error al copiar:', err);
+                                        copyButton.innerHTML = '<i class="fas fa-times"></i> Error';
+                                        setTimeout(() => {
+                                            copyButton.innerHTML = '<i class="fas fa-copy"></i> Copiar';
+                                        }, 2000);
+                                    }
+                                };
+                                header.appendChild(copyButton);
+
+                                pre.parentNode.insertBefore(header, pre);
+                            }
+                        });
+                        
+                        lastUpdateTime = now;
+                        
+                        // Scroll suave si estamos cerca del final
+                        const isNearBottom = window.innerHeight + window.pageYOffset >= document.documentElement.offsetHeight - 300;
+                        if (isNearBottom) {
+                            window.scrollTo({
+                                top: document.documentElement.scrollHeight,
+                                behavior: 'smooth'
+                            });
+                        }
+                    } catch (e) {
+                        console.error('Error updating content:', e);
+                    }
+                }
+            }
+        }
 
         document.getElementById('searchForm').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -283,6 +371,9 @@
             const aiResponseSection = document.getElementById('aiResponseSection');
             const aiResponseLoading = document.getElementById('aiResponseLoading');
             const aiResponseText = document.getElementById('aiResponseText');
+            const attackPlanContent = document.getElementById('attackPlanContent');
+            const generateAttackPlanSection = document.getElementById('generateAttackPlanSection');
+            const targetInput = document.getElementById('targetInput');
             
             if (!aiResponseSection || !aiResponseLoading || !aiResponseText) {
                 console.error('Required elements not found');
@@ -294,116 +385,19 @@
                 return;
             }
             
+            // Clear all previous content and hide attack plan section
+            aiResponseText.innerHTML = '';
+            attackPlanContent.innerHTML = '';
+            generateAttackPlanSection.classList.add('hidden');
+            if (targetInput) targetInput.value = 'example.com';
+            
             // Mostrar la sección y el loading
             aiResponseSection.classList.remove('hidden');
             aiResponseLoading.classList.remove('hidden');
-            aiResponseText.innerHTML = ''; // Clear previous content
-            scrollToBottom();  
+            scrollToBottom();
 
             let accumulatedText = '';
-            let lastUpdateTime = 0;
             const UPDATE_INTERVAL = 50; // Actualizar cada 50ms como máximo
-
-            const updateContent = (force = false) => {
-                const now = Date.now();
-                if (force || now - lastUpdateTime >= UPDATE_INTERVAL) {
-                    if (accumulatedText.trim()) {
-                        try {
-                            // Eliminar líneas en blanco múltiples, manteniendo solo una
-                            const processedText = accumulatedText.replace(/\n\s*\n/g, '\n');
-                            const formattedContent = marked.parse(processedText);
-                            aiResponseText.innerHTML = formattedContent;                            
-                                                        
-                            // Add specific styling for code blocks
-                            aiResponseText.querySelectorAll('pre code').forEach(block => {
-                                try {
-                                    hljs.highlightBlock(block);
-                                } catch (e) {
-                                    console.error('Error highlighting code:', e);
-                                }
-                                const pre = block.parentElement;
-                                pre.classList.add('prose', 'markdown-content');
-                                block.classList.add('hljs');
-
-                                // Crear el header para el bloque de código
-                                const header = document.createElement('div');
-                                header.className = 'code-block-header';
-
-                                // Detectar el lenguaje de programación
-                                const language = block.className.match(/language-(\w+)/)?.[1] || 'texto';
-                                const languageSpan = document.createElement('span');
-                                languageSpan.textContent = language.charAt(0).toUpperCase() + language.slice(1);
-                                header.appendChild(languageSpan);
-
-                                // Crear el botón de copiar
-                                const copyButton = document.createElement('button');
-                                copyButton.className = 'copy-button';
-                                copyButton.innerHTML = '<i class="fas fa-copy"></i> Copiar';
-                                copyButton.onclick = async () => {
-                                    try {
-                                        // Función auxiliar para copiar texto
-                                        const copyToClipboard = (text) => {
-                                            // Crear un elemento textarea temporal
-                                            const textarea = document.createElement('textarea');
-                                            textarea.value = text;
-                                            textarea.style.position = 'fixed';  // Evitar scroll
-                                            textarea.style.opacity = '0';       // Hacer invisible
-                                            document.body.appendChild(textarea);
-                                            
-                                            try {
-                                                // Intentar primero con la API moderna
-                                                if (navigator.clipboard && window.isSecureContext) {
-                                                    return navigator.clipboard.writeText(text);
-                                                }
-                                                
-                                                // Fallback para otros casos
-                                                textarea.select();
-                                                document.execCommand('copy');
-                                                document.body.removeChild(textarea);
-                                                return Promise.resolve();
-                                            } catch (err) {
-                                                document.body.removeChild(textarea);
-                                                return Promise.reject(err);
-                                            }
-                                        };
-
-                                        await copyToClipboard(block.textContent);
-                                        copyButton.innerHTML = '<i class="fas fa-check"></i> Copiado';
-                                        
-                                        setTimeout(() => {
-                                            copyButton.innerHTML = '<i class="fas fa-copy"></i> Copiar';
-                                        }, 2000);
-                                    } catch (err) {
-                                        console.error('Error al copiar:', err);
-                                        copyButton.innerHTML = '<i class="fas fa-times"></i> Error';
-                                        
-                                        setTimeout(() => {
-                                            copyButton.innerHTML = '<i class="fas fa-copy"></i> Copiar';
-                                        }, 2000);
-                                    }
-                                };
-                                header.appendChild(copyButton);
-
-                                // Insertar el header antes del bloque de código
-                                pre.parentNode.insertBefore(header, pre);
-                            });
-                            
-                            lastUpdateTime = now;
-                            
-                            // Scroll suave si estamos cerca del final
-                            const isNearBottom = window.innerHeight + window.pageYOffset >= document.documentElement.offsetHeight - 300;
-                            if (isNearBottom) {
-                                window.scrollTo({
-                                    top: document.documentElement.scrollHeight,
-                                    behavior: 'smooth'
-                                });
-                            }
-                        } catch (e) {
-                            console.error('Error updating content:', e);
-                        }
-                    }
-                }
-            };
 
             try {
                 const currentPattern = data.patterns[currentPatternIndex];
@@ -450,7 +444,7 @@
                 while (true) {
                     const { value, done } = await reader.read();
                     if (done) {
-                        updateContent(true); // Forzar última actualización
+                        updateContent(accumulatedText, aiResponseText, true);
                         break;
                     }
 
@@ -465,7 +459,7 @@
                                     const data = JSON.parse(content);
                                     if (data.response) {
                                         accumulatedText += data.response;
-                                        updateContent();
+                                        updateContent(accumulatedText, aiResponseText);
                                     }
                                 } catch (e) {
                                     console.error('Error parsing JSON:', e);
@@ -482,7 +476,7 @@
                 showErrorNotification(`Error al consultar la IA: ${error.message}`);
             } finally {
                 aiResponseLoading.classList.add('hidden');
-                updateContent(true); // Asegurar que se muestre todo el contenido
+                updateContent(accumulatedText, aiResponseText, true); // Asegurar que se muestre todo el contenido
                 // Show the attack plan generation button after AI response is complete
                 document.getElementById('generateAttackPlanSection').classList.remove('hidden');
             }
@@ -494,10 +488,9 @@
                 return;
             }
 
-            const target = document.getElementById('targetInput').value.trim();
+            var target = document.getElementById('targetInput').value.trim();
             if (!target) {
-                showErrorNotification('Por favor, introduce un objetivo válido');
-                return;
+                target.value = "example.com"; // Valor por defecto                     
             }
 
             const currentPattern = data.patterns[currentPatternIndex];
@@ -519,10 +512,14 @@
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
                 let accumulatedText = '';
+                const UPDATE_INTERVAL = 50;
 
                 while (true) {
                     const {value, done} = await reader.read();
-                    if (done) break;
+                    if (done) {
+                        updateContent(accumulatedText, attackPlanContent, true);
+                        break;
+                    }
                     
                     const chunk = decoder.decode(value);
                     const lines = chunk.split('\n');
@@ -533,22 +530,7 @@
                                 const data = JSON.parse(line.slice(5));
                                 if (data.response) {
                                     accumulatedText += data.response;
-                                    const formattedText = marked.parse(accumulatedText);
-                                    attackPlanContent.innerHTML = formattedText;
-                                    
-                                    // Highlight code blocks
-                                    attackPlanContent.querySelectorAll('pre code').forEach((block) => {
-                                        hljs.highlightBlock(block);
-                                    });
-
-                                    // Scroll if near bottom
-                                    const isNearBottom = window.innerHeight + window.pageYOffset >= document.documentElement.offsetHeight - 300;
-                                    if (isNearBottom) {
-                                        window.scrollTo({
-                                            top: document.documentElement.scrollHeight,
-                                            behavior: 'smooth'
-                                        });
-                                    }
+                                    updateContent(accumulatedText, attackPlanContent);
                                 }
                             } catch (e) {
                                 console.error('Error parsing JSON:', e);

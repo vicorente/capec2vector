@@ -80,7 +80,7 @@
     margin-top: 0rem;     /* Reducido de 1rem */
     padding-top: 0;         /* Asegura que no haya padding adicional */
     padding-bottom: 0;      /* Asegura que no haya padding adicional */
-    line-height: 1.2;
+    line-height: 0.8; /* Opcional: reducir el interlineado (actualmente está en 1.6) */
 }
 
 /* También ajusta el espacio entre elementos de la lista */
