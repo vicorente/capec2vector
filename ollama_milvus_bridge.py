@@ -638,7 +638,7 @@ def execute_tool(tool_name: str, params: Dict[str, Any]) -> Dict[str, Any]:
         return {"status": "error", "message": f"Error executing tool: {str(e)}"}
 
 
-def process_message( message: str) -> str:
+def process_message(message: str) -> str:
     """
     Process a user message to detect and execute tool requests,
     otherwise pass to the LLM for normal conversation.
@@ -679,8 +679,7 @@ def process_message( message: str) -> str:
     return None
 
 
-
-def extract_tool_request( message: str) -> Dict:
+def extract_tool_request(message: str) -> Dict:
     """
     Extract tool name and parameters from the LLM message.
     This is a simple approach and can be enhanced with better parsing.
@@ -718,86 +717,93 @@ def extract_tool_request( message: str) -> Dict:
 
 
 def generate_kali_attack_prompt(pattern_id: str, target: str = None) -> Dict[str, Any]:
-    """Generate an attack plan using Kali tools based on the CAPEC pattern analysis."""
+    """Generar un plan de ataque usando herramientas de Kali basado en el análisis de patrones CAPEC."""
     try:
         global OLLAMA_PATTERN_RESPONSE
         if not OLLAMA_PATTERN_RESPONSE:
-            return {"status": "error", "message": "No pattern analysis available"}
+            return {
+                "status": "error",
+                "message": "No hay análisis de patrones disponible",
+            }
 
         attack_prompt = f"""
-Based on this CAPEC pattern analysis:
+Basado en este análisis de patrones CAPEC:
 {OLLAMA_PATTERN_RESPONSE}
 
-Generate a specific attack plan using Kali Linux tools targeting: {target if target else 'example.com'}
+Genera un plan de ataque específico usando herramientas de Kali Linux contra: {target if target else 'example.com'}
 
-For this pattern {pattern_id}, provide:
-1. A list of recommended Kali tools from these available options: {', '.join(KALI_TOOLS.keys())}
-2. The exact commands to execute with these tools against the target {target if target else 'example.com'}
-3. The expected results and indicators of success
-4. Any prerequisites or setup needed
-5. The attack steps in order
+Para este patrón {pattern_id}, proporciona:
+1. Una lista de herramientas de Kali recomendadas de estas opciones disponibles: {', '.join(KALI_TOOLS.keys())}
+2. Los comandos exactos a ejecutar con estas herramientas contra el objetivo {target if target else 'example.com'}
+3. Los resultados esperados e indicadores de éxito
+4. Cualquier prerrequisito o configuración necesaria
+5. Los pasos del ataque en orden
 
-Format your response as a structured plan with clear sections and command examples.
-Only include tools from the available list: {', '.join(KALI_TOOLS.keys())}
-Make sure all commands are practical and executable against the specified target.
+Formatea tu respuesta como un plan estructurado con secciones claras y ejemplos de comandos.
+Solo incluye herramientas de la lista disponible: {', '.join(KALI_TOOLS.keys())}
+Asegúrate de que todos los comandos sean prácticos y ejecutables contra el objetivo especificado.
 """
-        logger.info(f"Generated attack prompt for target: {target}")
+        logger.info(f"Generado el prompt de ataque para el objetivo: {target}")
         # Get attack plan from Ollama
         response = ollama_client.chat(
             model="qwen2.5-coder:7b",
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a penetration testing expert specialized in Kali Linux tools and CAPEC attack patterns. Provide practical and specific attack plans."
+                    "content": "Eres un experto en pruebas de penetración especializado en herramientas de Kali Linux y patrones de ataque CAPEC. Proporciona planes de ataque prácticos y específicos.",
                 },
-                {"role": "user", "content": attack_prompt}
+                {"role": "user", "content": attack_prompt},
             ],
-            options={"temperature": 0.7}
+            options={"temperature": 0.7},
         )
 
         if response and "message" in response and "content" in response["message"]:
             return {
                 "status": "success",
                 "attack_plan": response["message"]["content"],
-                "pattern_id": pattern_id
+                "pattern_id": pattern_id,
             }
         else:
-            return {"status": "error", "message": "Failed to generate attack plan"}
+            return {
+                "status": "error",
+                "message": "No se pudo generar el plan de ataque",
+            }
 
     except Exception as e:
-        logger.error(f"Error generating attack plan: {str(e)}")
+        logger.error(f"Error generando el plan de ataque: {str(e)}")
         return {"status": "error", "message": str(e)}
+
 
 @app.post("/ollama/generate_attack_plan/{pattern_id}")
 async def get_attack_plan(pattern_id: str, target: str = Query(None)):
-    """Endpoint to generate a Kali Linux attack plan based on a CAPEC pattern."""
+    """Endpoint para generar un plan de ataque de Kali Linux basado en un patrón CAPEC."""
     try:
         if not pattern_id:
-            raise HTTPException(status_code=400, detail="Pattern ID is required")
+            raise HTTPException(status_code=400, detail="Se requiere el ID del patrón")
 
         async def generate():
             try:
                 global OLLAMA_PATTERN_RESPONSE
                 if not OLLAMA_PATTERN_RESPONSE:
-                    yield f"data: {json.dumps({'error': 'No pattern analysis available'})}\n\n"
+                    yield f"data: {json.dumps({'error': 'No hay análisis de patrones disponible'})}\n\n"
                     return
 
                 attack_prompt = f"""
-Based on this CAPEC pattern analysis:
+Basado en este análisis de patrones CAPEC:
 {OLLAMA_PATTERN_RESPONSE}
 
-Generate a specific attack plan using Kali Linux tools targeting: {target if target else 'example.com'}
+Genera un plan de ataque específico usando herramientas de Kali Linux contra: {target if target else 'example.com'}
 
-For this pattern {pattern_id}, provide:
-1. A list of recommended Kali tools from these available options: {', '.join(KALI_TOOLS.keys())}
-2. The exact commands to execute with these tools against the target {target if target else 'example.com'}
-3. The expected results and indicators of success
-4. Any prerequisites or setup needed
-5. The attack steps in order
+Para este patrón {pattern_id}, proporciona:
+1. Una lista de herramientas de Kali recomendadas de estas opciones disponibles: {', '.join(KALI_TOOLS.keys())}
+2. Los comandos exactos a ejecutar con estas herramientas contra el objetivo {target if target else 'example.com'}
+3. Los resultados esperados e indicadores de éxito
+4. Cualquier prerrequisito o configuración necesaria
+5. Los pasos del ataque en orden
 
-Format your response as a structured plan with clear sections and command examples.
-Only include tools from the available list: {', '.join(KALI_TOOLS.keys())}
-Make sure all commands are practical and executable against the specified target.
+Formatea tu respuesta como un plan estructurado con secciones claras y ejemplos de comandos.
+Solo incluye herramientas de la lista disponible: {', '.join(KALI_TOOLS.keys())}
+Asegúrate de que todos los comandos sean prácticos y ejecutables contra el objetivo especificado.
 """
                 # Get attack plan from Ollama with streaming
                 stream = ollama_client.chat(
@@ -805,34 +811,38 @@ Make sure all commands are practical and executable against the specified target
                     messages=[
                         {
                             "role": "system",
-                            "content": "You are a penetration testing expert specialized in Kali Linux tools and CAPEC attack patterns. Provide practical and specific attack plans."
+                            "content": "Eres un experto en pruebas de penetración especializado en herramientas de Kali Linux y patrones de ataque CAPEC. Proporciona planes de ataque prácticos y específicos.",
                         },
-                        {"role": "user", "content": attack_prompt}
+                        {"role": "user", "content": attack_prompt},
                     ],
                     stream=True,
-                    options={"temperature": 0.7}
+                    options={"temperature": 0.7},
                 )
 
                 for response in stream:
-                    if response and "message" in response and "content" in response["message"]:
+                    if (
+                        response
+                        and "message" in response
+                        and "content" in response["message"]
+                    ):
                         content = response["message"]["content"]
                         yield f"data: {json.dumps({'response': content}, ensure_ascii=False)}\n\n"
 
             except Exception as e:
-                logger.error(f"Error in attack plan generation: {str(e)}")
+                logger.error(f"Error en la generación del plan de ataque: {str(e)}")
                 yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
         return StreamingResponse(
             generate(),
             media_type="text/event-stream",
             headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-            }
+                "Cache-Control": "sin caché",
+                "Connection": "mantener viva",
+            },
         )
 
     except Exception as e:
-        logger.error(f"Error in attack plan endpoint: {str(e)}")
+        logger.error(f"Error en el endpoint del plan de ataque: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
