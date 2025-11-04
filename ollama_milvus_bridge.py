@@ -715,65 +715,6 @@ def extract_tool_request(message: str) -> Dict:
                 return {"tool": tool, "params": params}
     return {}
 
-
-def generate_kali_attack_prompt(pattern_id: str, target: str = None) -> Dict[str, Any]:
-    """Generar un plan de ataque usando herramientas de Kali basado en el análisis de patrones CAPEC."""
-    try:
-        global OLLAMA_PATTERN_RESPONSE
-        if not OLLAMA_PATTERN_RESPONSE:
-            return {
-                "status": "error",
-                "message": "No hay análisis de patrones disponible",
-            }
-
-        attack_prompt = f"""
-Basado en este análisis de patrones CAPEC:
-{OLLAMA_PATTERN_RESPONSE}
-
-Genera un plan de ataque específico usando herramientas de Kali Linux contra: {target if target else 'example.com'}
-
-Para este patrón {pattern_id}, proporciona:
-1. Una lista de herramientas de Kali recomendadas de estas opciones disponibles: {', '.join(KALI_TOOLS.keys())}
-2. Los comandos exactos a ejecutar con estas herramientas contra el objetivo {target if target else 'example.com'}
-3. Los resultados esperados e indicadores de éxito
-4. Cualquier prerrequisito o configuración necesaria
-5. Los pasos del ataque en orden
-
-Formatea tu respuesta como un plan estructurado con secciones claras y ejemplos de comandos.
-Solo incluye herramientas de la lista disponible: {', '.join(KALI_TOOLS.keys())}
-Asegúrate de que todos los comandos sean prácticos y ejecutables contra el objetivo especificado.
-"""
-        logger.info(f"Generado el prompt de ataque para el objetivo: {target}")
-        # Get attack plan from Ollama
-        response = ollama_client.chat(
-            model="qwen2.5-coder:7b",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "Eres un experto en pruebas de penetración especializado en herramientas de Kali Linux y patrones de ataque CAPEC. Proporciona planes de ataque prácticos y específicos.",
-                },
-                {"role": "user", "content": attack_prompt},
-            ],
-            options={"temperature": 0.7},
-        )
-
-        if response and "message" in response and "content" in response["message"]:
-            return {
-                "status": "success",
-                "attack_plan": response["message"]["content"],
-                "pattern_id": pattern_id,
-            }
-        else:
-            return {
-                "status": "error",
-                "message": "No se pudo generar el plan de ataque",
-            }
-
-    except Exception as e:
-        logger.error(f"Error generando el plan de ataque: {str(e)}")
-        return {"status": "error", "message": str(e)}
-
-
 @app.post("/ollama/generate_attack_plan/{pattern_id}")
 async def get_attack_plan(pattern_id: str, target: str = Query(None)):
     """Endpoint para generar un plan de ataque de Kali Linux basado en un patrón CAPEC."""

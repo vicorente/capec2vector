@@ -1,184 +1,177 @@
 # CAPEC2Vector
 
-Sistema de búsqueda semántica de patrones de ataque CAPEC (Common Attack Pattern Enumeration and Classification) utilizando embeddings vectoriales y LLMs.
+Una herramienta para convertir entradas CAPEC (Common Attack Pattern Enumeration and Classification) en vectores de embeddings para aplicaciones de aprendizaje automático en ciberseguridad.
 
 ## Descripción
 
-Este proyecto implementa un sistema de búsqueda semántica que permite:
-- Convertir patrones de ataque CAPEC a embeddings vectoriales
-- Almacenar y buscar patrones en una base de datos vectorial (Milvus)
-- Realizar consultas en lenguaje natural
-- Generar respuestas detalladas utilizando LLMs (Ollama)
+Este proyecto proporciona un pipeline para procesar descripciones de patrones de ataque CAPEC y convertirlas en representaciones vectoriales numéricas utilizando técnicas avanzadas de PLN. Estos vectores pueden utilizarse para diversas tareas de aprendizaje automático como clasificación de patrones de ataque, análisis de similitud y detección de amenazas.
 
 ## Características
 
-- 🔍 Búsqueda semántica de patrones CAPEC
-- 🤖 Integración con modelos de lenguaje a través de Ollama
-- 📊 Almacenamiento vectorial con Milvus
-- 🌐 API REST con FastAPI
-- ⚡ Streaming de respuestas en tiempo real
-- 🎨 Interfaz web interactiva
-
-## Tecnologías
-
-- **Backend:**
-  - FastAPI
-  - Milvus
-  - Sentence Transformers
-  - Ollama
-  - Python 3.x
-
-- **Frontend:**
-  - HTML5
-  - TailwindCSS
-  - JavaScript
-
-## Requisitos
-
-- Python 3.x
-- Milvus Server
-- Ollama Server
-- Dependencias de Python (ver `requirements.txt`)
+- Análisis de archivos XML de CAPEC
+- Procesamiento y limpieza de descripciones de patrones de ataque
+- Generación de embeddings vectoriales a partir de descripciones textuales
+- Soporte para múltiples modelos de embeddings
+- Procesamiento y almacenamiento eficiente de datos
 
 ## Instalación
 
-1. Clonar el repositorio:
 ```bash
-git clone https://github.com/tu-usuario/CAPEC2Vector.git
-cd CAPEC2Vector
-```
-
-2. Instalar dependencias:
-```bash
+git clone https://github.com/yourusername/capec2vector.git
+cd capec2vector
 pip install -r requirements.txt
 ```
 
-3. Configurar variables de entorno:
+## Uso
+
+1. Coloca tu archivo XML de CAPEC en el directorio data
+2. Ejecuta el script principal:
+
 ```bash
-export MILVUS_HOST=localhost
-export MILVUS_PORT=19530
-export OLLAMA_HOST=http://localhost:11434
+python main.py --input data/capec.xml --output vectors/
 ```
-## Milvus Database
+
+## Requisitos
+
+- Python 3.8+
+- Los paquetes requeridos están listados en requirements.txt
+
+## Licencia
+
+[Licencia MIT](LICENSE)
+
+## Contribuciones
+
+¡Las contribuciones son bienvenidas! No dudes en enviar un Pull Request.
+
+## Base de Datos Milvus
 
 Milvus es un sistema de base de datos vectorial de código abierto diseñado para el procesamiento de datos a gran escala y búsqueda de similitud. Características principales:
 
-- 🚀 Alto rendimiento en búsqueda de similitud
-- 📊 Optimizado para embeddings y datos vectoriales
-- 🔄 Escalabilidad horizontal
-- 🔍 Búsqueda aproximada de vecinos más cercanos (ANN)
-- 🛡️ Consistencia ACID
 
-### Configuración con Docker Compose
+# CAPEC2Vector
 
-1. Asegúrate de tener Docker y Docker Compose instalados:
+Repositorio para extraer descripciones del catálogo CAPEC, generar embeddings a partir de esos textos y exponer una API web que integra Milvus (almacenamiento vectorial) con un LLM (Ollama) para consultas enriquecidas.
+
+Este README se ha actualizado para reflejar la estructura real del proyecto y los scripts disponibles.
+
+## Qué incluye este repositorio
+
+- `embeddings.py`: extracción y limpieza del archivo XML `capec_latest/capec_v3.9.xml`, generación de embeddings (usa `nomic-ai/nomic-embed-text-v1` / `sentence-transformers`) y creación de la colección en Milvus.
+- `pipeline.py`: pipeline ejemplo que muestra la integración (parseo XML -> embeddings -> Milvus -> consulta -> Ollama).
+- `ollama_milvus_bridge.py`: aplicación FastAPI que expone endpoints para buscar patrones CAPEC en Milvus y generar respuestas con Ollama. También sirve una UI estática en `templates/index.html`.
+- `ollama_adapter.py`: adaptador orientado a integrar Ollama con un API de herramientas tipo "Kali" (p. ej. ejecutar herramientas remotas vía API).
+- `mcp_server.py`: servidor WebSocket (MCP) que permite ejecutar comandos remotos y devolver resultados (utilizado por integraciones en tiempo real).
+- `requirements.txt`: paquetes Python necesarios.
+- `docker-compose.yml`: fichero para levantar Milvus, etcd y MinIO (ya incluido en el repo).
+- `capec_latest/`: carpeta con el XML de CAPEC (`capec_v3.9.xml`) ya presente en el repositorio.
+
+## Requisitos
+
+- Python 3.8+
+- Docker & Docker Compose (opcional, para levantar Milvus/etcd/MinIO localmente)
+- Paquetes Python listados en `requirements.txt`.
+
+Instalación rápida (virtualenv recomendado):
+
 ```bash
-sudo apt update
-sudo apt install docker.io docker-compose
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-2. Crea un archivo `docker-compose.yml`:
+Nota: algunos modelos de embedding (y PyTorch) pueden requerir GPU o ajustes de versión.
+
+## Infraestructura (Milvus + MinIO + etcd)
+
+Se incluye un `docker-compose.yml` preparado para levantar Milvus (standalone), MinIO y etcd. Para ejecutar:
+
 ```bash
-# filepath: /home/ciberlab/IA/sacia/capec2vector/docker-compose.yml
-version: '3.5'
-
-services:
-  etcd:
-    container_name: milvus-etcd
-    image: quay.io/coreos/etcd:v3.5.5
-    environment:
-      - ETCD_AUTO_COMPACTION_MODE=revision
-      - ETCD_AUTO_COMPACTION_RETENTION=1000
-      - ETCD_QUOTA_BACKEND_BYTES=4294967296
-    volumes:
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/etcd:/etcd
-    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
-
-  minio:
-    container_name: milvus-minio
-    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
-    environment:
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-    volumes:
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/minio:/minio_data
-    command: minio server /minio_data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 30s
-      timeout: 20s
-      retries: 3
-
-  standalone:
-    container_name: milvus-standalone
-    image: milvusdb/milvus:v2.3.3
-    command: ["milvus", "run", "standalone"]
-    environment:
-      ETCD_ENDPOINTS: etcd:2379
-      MINIO_ADDRESS: minio:9000
-    volumes:
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/milvus:/var/lib/milvus
-    ports:
-      - "19530:19530"
-      - "9091:9091"
-    depends_on:
-      - "etcd"
-      - "minio"
-
-networks:
-  default:
-    name: milvus
+# Desde la raíz del repositorio
+Abre tu navegador y visita `http://localhost:8000`
 ```
 
-3. Inicia los servicios:
+Verifica los servicios:
+
 ```bash
-docker-compose up -d
+
 ```
 
-4. Verifica el estado de los contenedores:
+Si trabajas con Milvus remoto, ajusta las variables de entorno `MILVUS_HOST` y `MILVUS_PORT` antes de ejecutar los scripts.
+
+## Flujo principal y comandos de uso
+
+1) Crear la colección en Milvus e importar los patrones CAPEC (generar embeddings):
+
 ```bash
-docker-compose ps
+# Ejecuta el script principal de embeddings (crea colección y carga datos desde capec_latest/capec_v3.9.xml)
+python embeddings.py
 ```
 
-5. Para detener los servicios:
+El script `embeddings.py` hace:
+- Parse del XML `capec_latest/capec_v3.9.xml`.
+- Limpieza y normalización de campos relevantes.
+- Generación de textos enriquecidos por patrón y cálculo de embeddings con `nomic-ai/nomic-embed-text-v1`.
+- Creación de la colección `capec_patterns` en Milvus y carga de vectores + metadatos.
+
+2) Iniciar la API web que integra Milvus con Ollama (FastAPI):
+
 ```bash
-docker-compose down
+# Recomendado: ejecutar con uvicorn
+uvicorn ollama_milvus_bridge:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### Verificación de Milvus
+Endpoints principales:
+- `POST /search` : búsqueda semántica en Milvus (payload: {"query": "...", "top_k": 10}).
+- `POST /ollama/query` : búsqueda + generación de respuesta con Ollama (devuelve `answer` y `relevant_patterns`).
+- `/` : interfaz web (usa `templates/index.html`).
 
-Para comprobar que Milvus está funcionando correctamente:
+Variables de configuración relevantes (pueden definirse como variables de entorno):
+- `MILVUS_HOST` (default: localhost)
+- `MILVUS_PORT` (default: 19530)
+- `COLLECTION_NAME` (usado por los scripts; default: capec_patterns)
+- `OLLAMA_HOST` (URL del servicio Ollama)
+- `API_PORT` / `KALI_API_BASE_URL` (usados por `ollama_adapter.py` / `ollama_milvus_bridge.py` si integran herramientas externas)
 
-```python
-from pymilvus import connections
+3) Adaptador Ollama -> herramientas (opcional):
 
-# Conectar a Milvus
-connections.connect(host='localhost', port='19530')
-
-# Si no hay errores, la conexión fue exitosa
-print("Conexión exitosa a Milvus")
+```bash
+# Lanza el adaptador interactivo (requiere Ollama local accesible y un API de "Kali" remoto si se va a ejecutar herramientas)
+python ollama_adapter.py
 ```
 
-### Mantenimiento
+4) Servidor MCP (WebSocket) para ejecución remota de comandos:
 
-- Logs de los contenedores:
 ```bash
-docker-compose logs -f
+python mcp_server.py
 ```
 
-- Reiniciar servicios:
-```bash
-docker-compose restart
-```
+## Notas de seguridad y uso responsable
 
-- Limpiar volúmenes (¡PRECAUCIÓN! Elimina todos los datos):
-```bash
-docker-compose down -v
-## Uso
+- Este repositorio contiene componentes que pueden interactuar con herramientas de seguridad ofensivas (por ejemplo, integraciones orientadas a Kali). Úsalos únicamente en entornos controlados y con permiso explícito del propietario del objetivo.
+- Asegúrate de no exponer Ollama o el API de ejecución de comandos a redes públicas sin autenticación.
 
-1. Iniciar el servidor:
-```bash
-python ollama_milvus_bridge.py
-```
+## Desarrollo y ajuste de modelos
 
-2. Acceder a la interfaz web:
+- El proyecto usa `nomic-ai/nomic-embed-text-v1` por defecto para embeddings. Puedes cambiar el modelo en `embeddings.py` o `ollama_milvus_bridge.py` (función que inicializa `SentenceTransformer`).
+- `DIMENSION` en `embeddings.py` y la configuración de índice en Milvus deben concordar con la dimensión del embedding elegido.
+
+## Archivos clave y su propósito
+
+- `embeddings.py` — extracción, limpieza, generación de embeddings y carga en Milvus.
+- `pipeline.py` — ejemplo de pipeline completo y utilidades auxiliares (parseo, búsqueda, respuesta con Ollama).
+- `ollama_milvus_bridge.py` — FastAPI que expone la funcionalidad de búsqueda y generación por LLM.
+- `ollama_adapter.py` — adaptador para integrar Ollama con APIs de herramientas (Kali).
+- `mcp_server.py` — servidor WebSocket para ejecutar comandos remotos.
+
+## Contribuciones
+
+Pull requests y issues son bienvenidos. Para cambios importantes, abre una issue primero describiendo la propuesta.
+
+## Licencia
+
+Licencia MIT (si procede). Revisa el archivo `LICENSE` si existe.
+
+---
+
+Si quieres que adapte este README para incluir pasos reproducibles en tu entorno (por ejemplo, configuración de variables de entorno, instrucciones para usar Ollama localmente, o pasos para reproducir la carga de datos con un subconjunto del XML), dime y lo agrego.
