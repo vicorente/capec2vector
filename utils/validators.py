@@ -32,7 +32,11 @@ def sanitize_text(text: Optional[str], max_length: Optional[int] = None) -> str:
     # Decodificar entidades HTML
     text = html.unescape(text)
 
-    # Eliminar caracteres de control excepto saltos de línea y tabulaciones
+    # Eliminar caracteres de control excepto saltos de línea (\n, \x0A) y tabulaciones (\t, \x09)
+    # Rango \x00-\x08: caracteres de control desde NULL hasta BACKSPACE
+    # \x0B-\x0C: VERTICAL TAB y FORM FEED
+    # \x0E-\x1F: SHIFT OUT hasta UNIT SEPARATOR
+    # \x7F-\x9F: DEL y caracteres de control extendidos
     text = re.sub(r"[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F-\x9F]", "", text)
 
     # Strip whitespace

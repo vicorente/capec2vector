@@ -30,6 +30,12 @@ def check_python_version():
 
 def check_dependencies():
     """Verifica que las dependencias estén instaladas"""
+    # Mapeo de nombres de paquetes a nombres de importación cuando difieren
+    package_import_map = {
+        "sentence-transformers": "sentence_transformers",
+        "scikit-learn": "sklearn",
+    }
+    
     required_packages = [
         "torch",
         "transformers",
@@ -45,7 +51,9 @@ def check_dependencies():
     missing_packages = []
     for package in required_packages:
         try:
-            __import__(package.replace("-", "_"))
+            # Usar mapeo especial si existe, sino convertir guiones a guiones bajos
+            import_name = package_import_map.get(package, package.replace("-", "_"))
+            __import__(import_name)
             logger.info(f"✓ {package}")
         except ImportError:
             logger.warning(f"✗ {package} no instalado")

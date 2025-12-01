@@ -172,8 +172,13 @@ class EmbeddingCache:
 
         Returns:
             Diccionario con estadísticas del caché
+        
+        Nota: Para grandes volúmenes de caché, considera implementar
+        contadores incrementales en lugar de recalcular en cada llamada.
         """
         total_items = len(self.metadata)
+        # Nota: Para cachés grandes, esta iteración puede ser costosa
+        # Considera mantener un contador de items expirados si el rendimiento es crítico
         expired_items = sum(
             1 for item in self.metadata.values() if self._is_expired(item["timestamp"])
         )

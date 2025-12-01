@@ -114,15 +114,25 @@ class MilvusBackup:
             offset = 0
             batch_num = 0
 
-            # Obtener nombres de campos para la consulta
-            field_names = [f.name for f in collection.schema.fields if not f.is_primary or not f.auto_id]
+            # Obtener nombres de campos para la consulta (excluir campos primary auto_id)
+            field_names = [f.name for f in collection.schema.fields if not (f.is_primary and f.auto_id)]
+
+            # Obtener el nombre del campo primary key
+            primary_field = None
+            for field in collection.schema.fields:
+                if field.is_primary:
+                    primary_field = field.name
+                    break
+            
+            if not primary_field:
+                raise ValueError("No se encontró campo primary key en el esquema")
 
             while offset < num_entities:
                 # Consultar lote de datos
                 limit = min(batch_size, num_entities - offset)
 
                 results = collection.query(
-                    expr=f"id >= {offset}",
+                    expr=f"{primary_field} >= {offset}",
                     output_fields=field_names,
                     limit=limit,
                 )
