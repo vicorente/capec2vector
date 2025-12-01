@@ -27,6 +27,7 @@ venv/
 ENV/
 .env
 .venv
+
 # IDE - VSCode
 .vscode/*
 !.vscode/settings.json
@@ -35,10 +36,14 @@ ENV/
 !.vscode/extensions.json
 
 # Project specific
-capec_latest/
-*.xml
 embeddings/
 *.npy
+
+# Cache and temporary files
+.cache/
+logs/
+exports/
+backups/
 *.pkl
 
 # OS specific
@@ -52,3 +57,10 @@ Thumbs.db
 *.meta
 *.log
 
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Docker volumes
+volumes/
