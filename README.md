@@ -2,47 +2,217 @@
 
 Una herramienta para convertir entradas CAPEC (Common Attack Pattern Enumeration and Classification) en vectores de embeddings para aplicaciones de aprendizaje automático en ciberseguridad.
 
-## Descripción
+## 🎯 Descripción
 
-Este proyecto proporciona un pipeline para procesar descripciones de patrones de ataque CAPEC y convertirlas en representaciones vectoriales numéricas utilizando técnicas avanzadas de PLN. Estos vectores pueden utilizarse para diversas tareas de aprendizaje automático como clasificación de patrones de ataque, análisis de similitud y detección de amenazas.
+Este proyecto proporciona un pipeline completo para procesar descripciones de patrones de ataque CAPEC y convertirlas en representaciones vectoriales numéricas utilizando técnicas avanzadas de PLN. Estos vectores se almacenan en Milvus y pueden utilizarse para diversas tareas como búsqueda semántica, clasificación de patrones de ataque, análisis de similitud y detección de amenazas.
 
-## Características
+## ✨ Características Principales
 
-- Análisis de archivos XML de CAPEC
-- Procesamiento y limpieza de descripciones de patrones de ataque
-- Generación de embeddings vectoriales a partir de descripciones textuales
-- Soporte para múltiples modelos de embeddings
-- Procesamiento y almacenamiento eficiente de datos
+### Core Features
+- 🔍 **Búsqueda Semántica**: Encuentra patrones CAPEC usando lenguaje natural
+- 🤖 **Integración con LLM**: Respuestas contextualizadas usando Ollama
+- 🗄️ **Base de Datos Vectorial**: Almacenamiento eficiente en Milvus
+- 📊 **Interfaz Web**: UI interactiva para explorar patrones
+- 🔌 **API REST**: FastAPI con endpoints completos
 
-## Instalación
+### Nuevas Características 🆕
+- ⚙️ **Configuración Centralizada**: Gestión unificada de configuraciones
+- ✅ **Tests Automatizados**: Suite de tests unitarios
+- 💾 **Sistema de Caché**: Cache inteligente de embeddings con TTL
+- 🛡️ **Validadores**: Sanitización y validación robusta de datos
+- 🔧 **Script de Setup**: Verificación automática del entorno
+- 💼 **Backup/Restauración**: Herramientas para Milvus
+- 📈 **Análisis y Estadísticas**: Generación de reportes completos
+- 📚 **Documentación Completa**: Guías y ejemplos de uso
+
+## 🚀 Inicio Rápido
+
+### Opción 1: Setup Automático (Recomendado)
 
 ```bash
-git clone https://github.com/yourusername/capec2vector.git
+# Clonar repositorio
+git clone https://github.com/vicorente/capec2vector.git
 cd capec2vector
+
+# Crear entorno virtual
+python3 -m venv .venv
+source .venv/bin/activate  # En Windows: .venv\Scripts\activate
+
+# Instalar dependencias
 pip install -r requirements.txt
+
+# Verificar setup
+python setup.py
 ```
 
-## Uso
+### Opción 2: Setup Manual
 
-1. Coloca tu archivo XML de CAPEC en el directorio data
-2. Ejecuta el script principal:
+Ver [QUICKSTART.md](QUICKSTART.md) para instrucciones detalladas.
+
+## 📖 Documentación
+
+- 📘 [QUICKSTART.md](QUICKSTART.md) - Guía de inicio rápido
+- 📗 [FEATURES.md](FEATURES.md) - Documentación de características
+- 📙 [API_DOCS.md](API_DOCS.md) - Documentación de la API REST
+- 📕 [examples/](examples/) - Ejemplos de uso prácticos
+
+## 💻 Uso Básico
+
+### 1. Iniciar servicios
 
 ```bash
-python main.py --input data/capec.xml --output vectors/
+# Levantar Milvus
+docker-compose up -d
+
+# Generar embeddings (primera vez)
+python embeddings.py
+
+# Iniciar API
+uvicorn ollama_milvus_bridge:app --reload
 ```
 
-## Requisitos
+### 2. Usar la interfaz web
+
+Abre tu navegador en: http://localhost:8000
+
+### 3. Usar la API desde Python
+
+```python
+import requests
+
+# Buscar patrones
+response = requests.post(
+    "http://localhost:8000/search",
+    json={"query": "SQL injection attacks", "top_k": 5}
+)
+
+results = response.json()
+for pattern in results["results"]:
+    print(f"{pattern['pattern_id']}: {pattern['name']}")
+```
+
+Ver más ejemplos en [examples/](examples/)
+
+## 🛠️ Herramientas Incluidas
+
+### Scripts de Utilidad
+
+```bash
+# Verificar setup
+python setup.py
+
+# Análisis de patrones
+python utils/analysis.py --collection capec_patterns
+
+# Backup de Milvus
+python utils/milvus_backup.py export --collection capec_patterns
+
+# Búsqueda de patrones
+python search_patterns.py "cross-site scripting"
+```
+
+### Ejemplos
+
+```bash
+# Ejemplo de búsqueda
+python examples/search_example.py "buffer overflow"
+
+# Ejemplo de caché
+python examples/cache_example.py
+
+# Ejemplo de análisis
+python examples/analysis_example.py
+```
+
+## 📋 Requisitos
 
 - Python 3.8+
-- Los paquetes requeridos están listados en requirements.txt
+- Docker & Docker Compose
+- 4GB RAM mínimo
+- 10GB espacio en disco
 
-## Licencia
+### Dependencias Python
+
+Ver [requirements.txt](requirements.txt) para la lista completa.
+
+Principales:
+- sentence-transformers
+- pymilvus
+- fastapi
+- ollama (opcional, para LLM)
+
+## 🔧 Configuración
+
+Todas las configuraciones están centralizadas en `config.py`.
+
+### Variables de Entorno
+
+```bash
+export MILVUS_HOST=localhost
+export MILVUS_PORT=19530
+export OLLAMA_HOST=http://localhost:11434
+export API_PORT=8000
+export ENABLE_CACHE=true
+```
+
+Ver [FEATURES.md](FEATURES.md#configuración-centralizada) para más detalles.
+
+## 🧪 Tests
+
+```bash
+# Ejecutar todos los tests
+python -m unittest discover tests -v
+
+# Test específico
+python -m unittest tests.test_config -v
+```
+
+## 📊 Análisis y Reportes
+
+```bash
+# Generar reporte completo
+python utils/analysis.py --output report.txt
+
+# Buscar patrones específicos
+python utils/analysis.py --search "injection"
+
+# Ver estadísticas
+python -c "from utils.analysis import CAPECAnalyzer; \
+  analyzer = CAPECAnalyzer('capec_patterns'); \
+  print(analyzer.get_basic_stats())"
+```
+
+## 💾 Backup y Restauración
+
+```bash
+# Exportar colección
+python utils/milvus_backup.py export --collection capec_patterns
+
+# Importar colección
+python utils/milvus_backup.py import --import-dir backups/capec_patterns_20231201
+```
+
+## 🤝 Contribuciones
+
+¡Las contribuciones son bienvenidas! Por favor:
+
+1. Fork el repositorio
+2. Crea una rama para tu feature (`git checkout -b feature/nueva-caracteristica`)
+3. Añade tests si es necesario
+4. Commit tus cambios (`git commit -am 'Añadir nueva característica'`)
+5. Push a la rama (`git push origin feature/nueva-caracteristica`)
+6. Crea un Pull Request
+
+## 📄 Licencia
 
 [Licencia MIT](LICENSE)
 
-## Contribuciones
+## 🙏 Agradecimientos
 
-¡Las contribuciones son bienvenidas! No dudes en enviar un Pull Request.
+- [MITRE CAPEC](https://capec.mitre.org/) por la base de datos de patrones
+- [Milvus](https://milvus.io/) por la base de datos vectorial
+- [sentence-transformers](https://www.sbert.net/) por los modelos de embeddings
+- [Ollama](https://ollama.ai/) por la integración con LLMs
 
 ## Base de Datos Milvus
 
